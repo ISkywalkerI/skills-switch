@@ -1,0 +1,35 @@
+name: Feature request
+description: Suggest an improvement for Skills Switch
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement.
+  - type: input
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem are you trying to solve?
+      placeholder: Managing skills across more host directories is difficult because...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior you want
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: List any alternatives or workarounds you have tried
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add screenshots, examples, or constraints if relevant
