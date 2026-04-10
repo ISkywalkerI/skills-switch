@@ -1,6 +1,14 @@
 # Skills Switch
 
+One-click global skill switching, fast and frictionless.
+
+Install and manage skills freely, with zero mental overhead.
+
 [中文说明 / Chinese Version](./README_CN.md)
+
+Skills Switch focuses on one thing: unified global skill control.
+Compared with tools like cc-switch that rely on fine-grained per-host control, this project takes a more direct approach. In practice, cc-switch-style control is not always reliable outside Claude Code, because hosts such as OpenCode and Codex may scan shared paths like .agents/skills. For that reason, Skills Switch removes host-by-host control and keeps only a simple, consistent global switch.
+When enabled, a skill is available to all supported agents. Vice versa.
 
 `Skills Switch` is a desktop GUI built with Electron, React, and TypeScript for managing shared AI agent skill directories from one place.
 
@@ -40,10 +48,8 @@ Then:
 
 1. Open the app
 2. Click `Rescan`
-3. Click `Migration`
-4. Review `Global Skill Switches` and `Filesystem Surfaces`
-5. Run `Migration Assistant` if legacy skills are detected
-6. Enable the skills you want to sync globally
+3. Click `Run Migration`
+4. Enable or disable the skills globally
 
 ## Features
 

@@ -1,6 +1,14 @@
 # Skills Switch
 
+方便快捷的全局 Skills 一键开关！
+
+让你能够没有心理负担，随心所欲地安装 skills。
+
 [English README](./README.md)
+
+`Skills Switch` 专注于一件事：全局统一控制 skills。
+相比 cc-switch 这类按单个 Host 细粒度控制的方案，本项目做了更直接的取舍。由于 cc-switch 的控制在 Claude Code 之外的宿主中并不总是稳定有效，例如 OpenCode、Codex 等会在类似 .agents/skills 的公用路径中扫描，因此这里移除了逐 Host 控制，只保留简单一致的全局开关。
+开启后，所有受支持的 Agent 都可以使用该 skill；Vice versa.
 
 `Skills Switch` 是一个基于 Electron、React 和 TypeScript 的桌面 GUI 工具，用于统一管理多个 AI Agent 宿主环境中的技能目录。
 
@@ -40,10 +48,8 @@ npm run dist
 
 1. 打开应用
 2. 点击 `Rescan`
-3. 点击 `Migration`
-4. 查看 `Global Skill Switches` 和 `Filesystem Surfaces`
-5. 如果检测到 legacy skills，则运行 `Migration Assistant`
-6. 启用你想要全局同步的技能
+3. 点击 `Run Migration`
+4. 启用或禁用你想要全局同步的技能
 
 ## 功能特性
 
