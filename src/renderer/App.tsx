@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react'
 
-import { CELL_STATE_LABELS } from '../shared/models'
-import type { AppSnapshot, HostDefinition, SkillCell, SkillRow } from '../shared/models'
+import { SKILL_STATE_LABELS } from '../shared/models'
+import type {
+  AppSnapshot,
+  ManagedLinkStatus,
+  ManagedSurfaceDefinition,
+  ScanSurfaceDefinition,
+  SkillLocation,
+  SkillRow,
+} from '../shared/models'
 
 type Feedback = {
   tone: 'success' | 'error'
@@ -35,72 +42,14 @@ export default function App() {
     }
   }
 
-  async function handleToggle(cell: SkillCell): Promise<void> {
-    const nextEnabled = cell.state !== 'enabled'
-    setBusyToken(`${cell.hostId}:${cell.skillName}`)
+  async function handleToggle(skillName: string, enabled: boolean): Promise<void> {
+    setBusyToken(`toggle:${skillName}`)
 
     try {
-      const result = await window.skillsSwitch.toggleSkill({
-        hostId: cell.hostId,
-        skillName: cell.skillName,
-        enabled: nextEnabled,
-      })
-
-      setSnapshot(result.snapshot)
-      setFeedback({
-        tone: result.ok ? 'success' : 'error',
-        text: result.message,
-      })
-    } catch (error) {
-      setFeedback({
-        tone: 'error',
-        text: getErrorMessage(error),
-      })
-    } finally {
-      setBusyToken(null)
-    }
-  }
-
-  async function handleAddHost(): Promise<void> {
-    try {
-      const directory = await window.skillsSwitch.chooseDirectory()
-      if (!directory) {
-        return
+      const result = await window.skillsSwitch.toggleSkill({ skillName, enabled })
+      if (result.snapshot) {
+        setSnapshot(result.snapshot)
       }
-
-      const suggested = directory.split(/[\\/]/).filter(Boolean).at(-1) ?? 'Custom Host'
-      const name = window.prompt('Custom host name', suggested)
-      if (name === null) {
-        return
-      }
-
-      setBusyToken('add-host')
-      const result = await window.skillsSwitch.addCustomHost({ name, path: directory })
-      setSnapshot(result.snapshot)
-      setFeedback({
-        tone: result.ok ? 'success' : 'error',
-        text: result.message,
-      })
-    } catch (error) {
-      setFeedback({
-        tone: 'error',
-        text: getErrorMessage(error),
-      })
-    } finally {
-      setBusyToken(null)
-    }
-  }
-
-  async function handleRemoveHost(host: HostDefinition): Promise<void> {
-    const confirmed = window.confirm(`Remove the custom host ${host.name}? This does not delete files on disk.`)
-    if (!confirmed) {
-      return
-    }
-
-    try {
-      setBusyToken(`remove:${host.id}`)
-      const result = await window.skillsSwitch.removeCustomHost(host.id)
-      setSnapshot(result.snapshot)
       setFeedback({
         tone: result.ok ? 'success' : 'error',
         text: result.message,
@@ -119,7 +68,9 @@ export default function App() {
     try {
       setBusyToken('migrate')
       const result = await window.skillsSwitch.runMigration()
-      setSnapshot(result.snapshot)
+      if (result.snapshot) {
+        setSnapshot(result.snapshot)
+      }
       setFeedback({
         tone: result.ok ? 'success' : 'error',
         text: result.message,
@@ -143,25 +94,28 @@ export default function App() {
   }
 
   const isBusy = busyToken !== null
+  const enabledCount = snapshot?.skills.filter((skill) => skill.state === 'enabled').length ?? 0
+  const migrationCount = snapshot?.skills.filter((skill) => skill.state === 'needsMigration').length ?? 0
+  const issueCount = snapshot?.skills.filter((skill) => skill.state === 'invalid' || skill.state === 'conflict' || skill.state === 'partial').length ?? 0
 
   return (
     <div className="shell">
       <div className="grain" />
       <header className="hero-panel">
         <div>
-          <p className="eyebrow">Agent Skill Control Plane</p>
+          <p className="eyebrow">Global Agent Skill Control Plane</p>
           <h1>Skills Switch</h1>
           <p className="hero-copy">
-            Scan OpenCode, Claude Code, Codex, and any custom host directory. Each enabled skill is a managed
-            junction into one shared repository.
+            Scan legacy skill roots, keep one central repository authoritative, and mirror every enabled skill into
+            <code>~/.agents/skills</code>
+            and
+            <code>~/.claude/skills</code>
+            together.
           </p>
         </div>
         <div className="hero-actions">
           <button className="primary-button" disabled={isBusy} onClick={() => void refreshSnapshot()}>
             Rescan
-          </button>
-          <button className="secondary-button" disabled={isBusy} onClick={() => void handleAddHost()}>
-            Add Custom Host
           </button>
           <button
             className="secondary-button"
@@ -185,46 +139,44 @@ export default function App() {
               <h2>{snapshot.repositoryPath}</h2>
               <p className="muted-copy">
                 {snapshot.repositoryExists
-                  ? 'This repository already exists and is ready to host managed skills.'
+                  ? 'This repository already exists and is the only authoritative skill store.'
                   : 'The repository will be created automatically when you migrate or enable the first managed skill.'}
               </p>
             </div>
-            <div className="repository-badge">
-              <span className={snapshot.repositoryExists ? 'status-pill live' : 'status-pill idle'}>
-                {snapshot.repositoryExists ? 'Ready' : 'Pending'}
-              </span>
-              <span className="timestamp">Updated {formatTimestamp(snapshot.lastUpdated)}</span>
+            <div className="global-metrics">
+              <Metric label="Enabled" value={enabledCount} tone="linked" />
+              <Metric label="Needs Migration" value={migrationCount} tone="available" />
+              <Metric label="Issues" value={issueCount} tone="issues" />
             </div>
           </section>
 
-          <section className="hosts-grid">
-            {snapshot.hosts.map((host) => {
-              const summary = snapshot.hostSummaries[host.id]
-              return (
-                <article className="host-card card-surface" key={host.id}>
-                  <div className="host-card-header">
-                    <div>
-                      <p className="section-label">{host.builtIn ? 'Built-in Host' : 'Custom Host'}</p>
-                      <h3>{host.name}</h3>
-                    </div>
-                    {!host.builtIn ? (
-                      <button className="ghost-button" disabled={isBusy} onClick={() => void handleRemoveHost(host)}>
-                        Remove
-                      </button>
-                    ) : null}
-                  </div>
-                  <p className="path-chip">{host.path}</p>
-                  <div className="host-metrics">
-                    <Metric label="Linked" value={summary.enabled} tone="linked" />
-                    <Metric label="Available" value={summary.disabled} tone="available" />
-                    <Metric label="Issues" value={summary.issues} tone="issues" />
-                  </div>
-                  <button className="secondary-button compact" onClick={() => void handleOpenPath(host.path)}>
-                    Open Host Directory
-                  </button>
-                </article>
-              )
-            })}
+          <section className="surface-section card-surface">
+            <div className="matrix-header">
+              <div>
+                <p className="section-label">Filesystem Surfaces</p>
+                <h2>Discovery inputs and managed outputs</h2>
+              </div>
+            </div>
+
+            <div className="surface-layout">
+              <div>
+                <p className="section-label">Managed Outputs</p>
+                <div className="surface-grid">
+                  {snapshot.managedSurfaces.map((surface) => (
+                    <SurfaceCard key={surface.id} surface={surface} onOpenPath={handleOpenPath} />
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="section-label">Scanned Paths</p>
+                <div className="surface-grid">
+                  {snapshot.scanSurfaces.map((surface) => (
+                    <SurfaceCard key={surface.id} surface={surface} onOpenPath={handleOpenPath} />
+                  ))}
+                </div>
+              </div>
+            </div>
           </section>
 
           {snapshot.migration.needed ? (
@@ -232,10 +184,11 @@ export default function App() {
               <div className="migration-header">
                 <div>
                   <p className="section-label">Migration Assistant</p>
-                  <h2>Move existing real skill folders into the shared repository</h2>
+                  <h2>Move legacy skills into the shared repository</h2>
                   <p className="muted-copy">
-                    The migration keeps the current enabled hosts, moves the real skill contents into
-                    <code>{snapshot.migration.repositoryPath}</code>, then recreates junction links for each enabled host.
+                    Migration moves the single detected source directory into
+                    <code>{snapshot.migration.repositoryPath}</code>
+                    , removes leftover legacy links, then recreates matching links in both managed surfaces.
                   </p>
                 </div>
                 <button
@@ -253,10 +206,10 @@ export default function App() {
                     <article className="migration-item" key={item.skillName}>
                       <div>
                         <h3>{item.skillName}</h3>
-                        <p className="muted-copy">{item.sourcePath}</p>
+                        <p className="muted-copy">Source: {item.sourcePath}</p>
                       </div>
                       <div>
-                        <p className="migration-meta">Will enable in: {item.hostNames.join(', ')}</p>
+                        <p className="migration-meta">Detected in: {item.sourceSurfaceName}</p>
                         <p className="migration-meta">Target: {item.repositoryPath}</p>
                       </div>
                     </article>
@@ -280,11 +233,11 @@ export default function App() {
           <section className="matrix-panel card-surface">
             <div className="matrix-header">
               <div>
-                <p className="section-label">Skill Matrix</p>
-                <h2>Per-host enable and disable switches</h2>
+                <p className="section-label">Global Skill Switches</p>
+                <h2>One shared enabled state across all hosts</h2>
               </div>
               <div className="legend-row">
-                {Object.entries(CELL_STATE_LABELS).map(([state, label]) => (
+                {Object.entries(SKILL_STATE_LABELS).map(([state, label]) => (
                   <span className={`legend-pill ${state}`} key={state}>
                     {label}
                   </span>
@@ -293,47 +246,18 @@ export default function App() {
             </div>
 
             {snapshot.skills.length === 0 ? (
-              <div className="empty-state">
-                No skills detected yet. Add a host or run the migration assistant to centralize existing installs.
-              </div>
+              <div className="empty-state">No skills detected yet. Add skills to a scanned path or run migration.</div>
             ) : (
-              <div className="matrix-scroll">
-                <table className="skills-table">
-                  <thead>
-                    <tr>
-                      <th className="sticky-column">Skill</th>
-                      {snapshot.hosts.map((host) => (
-                        <th key={host.id}>{host.name}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {snapshot.skills.map((skill) => (
-                      <tr key={skill.skillName}>
-                        <td className="sticky-column skill-name-cell">
-                          <div className="skill-name-wrap">
-                            <strong>{skill.skillName}</strong>
-                            <span className={skill.inRepository ? 'repo-pill ready' : 'repo-pill pending'}>
-                              {skill.inRepository ? 'In repository' : 'Needs migration'}
-                            </span>
-                          </div>
-                          <span className="skill-path">{skill.repositoryPath ?? 'No central copy yet'}</span>
-                        </td>
-                        {snapshot.hosts.map((host) => (
-                          <td key={`${skill.skillName}:${host.id}`}>
-                            <SkillCellControl
-                              busy={busyToken === `${host.id}:${skill.skillName}` || isBusy}
-                              cell={skill.hosts[host.id]}
-                              row={skill}
-                              onOpenPath={handleOpenPath}
-                              onToggle={handleToggle}
-                            />
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="skills-list">
+                {snapshot.skills.map((skill) => (
+                  <SkillCard
+                    key={skill.skillName}
+                    busy={busyToken === `toggle:${skill.skillName}` || isBusy}
+                    onOpenPath={handleOpenPath}
+                    onToggle={handleToggle}
+                    skill={skill}
+                  />
+                ))}
               </div>
             )}
           </section>
@@ -356,58 +280,160 @@ function Metric({ label, value, tone }: { label: string; value: number; tone: st
   )
 }
 
-function SkillCellControl({
-  cell,
-  row,
+function SurfaceCard({
+  surface,
+  onOpenPath,
+}: {
+  surface: ScanSurfaceDefinition | ManagedSurfaceDefinition
+  onOpenPath: (targetPath: string) => Promise<void>
+}) {
+  const surfaceType = 'role' in surface ? (surface.role === 'primary' ? 'Primary Output' : 'Compatibility Output') : surface.managed ? 'Managed + Scanned' : 'Legacy Scan Only'
+
+  return (
+    <article className="surface-card">
+      <div>
+        <p className="section-label">{surfaceType}</p>
+        <h3>{surface.name}</h3>
+      </div>
+      <p className="path-chip">{surface.path}</p>
+      <p className="muted-copy">{surface.description}</p>
+      <button className="secondary-button compact" onClick={() => void onOpenPath(surface.path)}>
+        Open Directory
+      </button>
+    </article>
+  )
+}
+
+function SkillCard({
+  skill,
   busy,
   onToggle,
   onOpenPath,
 }: {
-  cell: SkillCell
-  row: SkillRow
+  skill: SkillRow
   busy: boolean
-  onToggle: (cell: SkillCell) => Promise<void>
+  onToggle: (skillName: string, enabled: boolean) => Promise<void>
   onOpenPath: (targetPath: string) => Promise<void>
 }) {
-  const interactive = cell.state === 'enabled' || cell.state === 'disabled'
+  return (
+    <article className={`skill-card ${skill.state}`}>
+      <div className="skill-card-header">
+        <div>
+          <div className="skill-name-wrap">
+            <strong>{skill.skillName}</strong>
+            <span className={`state-badge ${skill.state}`}>{SKILL_STATE_LABELS[skill.state]}</span>
+          </div>
+          <p className="skill-path">{skill.repositoryPath ?? 'No central copy yet'}</p>
+        </div>
+        {skill.repositoryPath ? (
+          <button className="path-link" onClick={() => void onOpenPath(skill.repositoryPath!)}>
+            Open Repository Copy
+          </button>
+        ) : null}
+      </div>
+
+      <p className="muted-copy">{skill.message}</p>
+
+      <div className="skill-detail-grid">
+        <div className="detail-block">
+          <p className="section-label">Managed Outputs</p>
+          <div className="managed-links-grid">
+            {skill.managedLinks.map((link) => (
+              <ManagedLinkCard key={link.surfaceId} link={link} onOpenPath={onOpenPath} />
+            ))}
+          </div>
+        </div>
+
+        <div className="detail-block">
+          <p className="section-label">Detected In</p>
+          {skill.locations.length === 0 ? (
+            <div className="empty-inline">Only the central repository copy exists.</div>
+          ) : (
+            <div className="location-list">
+              {skill.locations.map((location) => (
+                <LocationCard key={`${location.surfaceId}:${location.entryPath}`} location={location} onOpenPath={onOpenPath} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="skill-actions">
+        {skill.canEnable ? (
+          <button className="primary-button" disabled={busy} onClick={() => void onToggle(skill.skillName, true)}>
+            {skill.state === 'partial' ? 'Repair Enable' : 'Enable Globally'}
+          </button>
+        ) : null}
+        {skill.canDisable ? (
+          <button className="secondary-button" disabled={busy} onClick={() => void onToggle(skill.skillName, false)}>
+            Disable Globally
+          </button>
+        ) : null}
+      </div>
+    </article>
+  )
+}
+
+function ManagedLinkCard({
+  link,
+  onOpenPath,
+}: {
+  link: ManagedLinkStatus
+  onOpenPath: (targetPath: string) => Promise<void>
+}) {
+  const badgeTone = link.state === 'enabled' ? 'enabled' : link.state === 'missing' ? 'disabled' : 'invalid'
+  const badgeLabel = link.state === 'enabled' ? 'Linked' : link.state === 'missing' ? 'Missing' : 'Conflict'
 
   return (
-    <div className={`cell-card ${cell.state}`} title={cell.message}>
-      {interactive ? (
-        <button
-          className={`toggle-switch ${cell.state === 'enabled' ? 'on' : 'off'}`}
-          role="switch"
-          aria-checked={cell.state === 'enabled'}
-          disabled={busy}
-          onClick={() => void onToggle(cell)}
-        >
-          <span className="toggle-track">
-            <span className="toggle-thumb" />
-          </span>
-          <span className="toggle-text">{CELL_STATE_LABELS[cell.state]}</span>
+    <div className={`managed-link-card ${link.state}`}>
+      <div className="skill-name-wrap">
+        <strong>{link.surfaceName}</strong>
+        <span className={`state-badge ${badgeTone}`}>{badgeLabel}</span>
+      </div>
+      <span className="skill-path">{link.entryPath}</span>
+      <p className="muted-copy">{link.message}</p>
+      <div className="inline-actions">
+        <button className="path-link" onClick={() => void onOpenPath(link.entryPath)}>
+          Open Path
         </button>
-      ) : (
-        <div className="state-badge-wrap">
-          <span className={`state-badge ${cell.state}`}>{CELL_STATE_LABELS[cell.state]}</span>
-          {cell.canDisable ? (
-            <button className="inline-link" disabled={busy} onClick={() => void onToggle(cell)}>
-              Remove link
-            </button>
-          ) : null}
-        </div>
-      )}
-
-      {cell.targetPath ? (
-        <button className="path-link" onClick={() => void onOpenPath(cell.targetPath!)}>
-          {cell.state === 'disabled' && row.repositoryPath ? 'Open repository copy' : 'Open target'}
-        </button>
-      ) : null}
+        {link.targetPath ? (
+          <button className="path-link" onClick={() => void onOpenPath(link.targetPath!)}>
+            Open Target
+          </button>
+        ) : null}
+      </div>
     </div>
   )
 }
 
-function formatTimestamp(value: string): string {
-  return new Date(value).toLocaleString()
+function LocationCard({
+  location,
+  onOpenPath,
+}: {
+  location: SkillLocation
+  onOpenPath: (targetPath: string) => Promise<void>
+}) {
+  const kindLabel = location.kind === 'link' ? 'Junction' : location.kind === 'directory' ? 'Directory' : 'File'
+
+  return (
+    <div className="location-card">
+      <div className="skill-name-wrap">
+        <strong>{location.surfaceName}</strong>
+        <span className="repo-pill pending">{kindLabel}</span>
+      </div>
+      <span className="skill-path">{location.entryPath}</span>
+      <div className="inline-actions">
+        <button className="path-link" onClick={() => void onOpenPath(location.entryPath)}>
+          Open Entry
+        </button>
+        {location.realPath ? (
+          <button className="path-link" onClick={() => void onOpenPath(location.realPath!)}>
+            Open Real Path
+          </button>
+        ) : null}
+      </div>
+    </div>
+  )
 }
 
 function getErrorMessage(error: unknown): string {

@@ -1,100 +1,91 @@
-import { randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import type { HostDefinition } from '../shared/models.js'
-
-interface CustomHostRecord {
-  id: string
-  name: string
-  path: string
-}
+import type { ManagedSurfaceDefinition, ScanSurfaceDefinition } from '../shared/models.js'
 
 interface StoredConfig {
-  repositoryPath: string
-  customHosts: CustomHostRecord[]
+  repositoryPath?: string
 }
 
-export interface LoadedConfig extends StoredConfig {
+export interface LoadedConfig {
   filePath: string
-  hosts: HostDefinition[]
+  repositoryPath: string
 }
 
 export function getDefaultRepositoryPath(homeDir = os.homedir()): string {
   return path.join(homeDir, '.skills-repo', 'skills')
 }
 
-export function getBuiltInHosts(homeDir = os.homedir()): HostDefinition[] {
+export function getScanSurfaces(homeDir = os.homedir()): ScanSurfaceDefinition[] {
   return [
     {
       id: 'opencode',
-      name: 'OpenCode',
-      kind: 'opencode',
-      path: path.join(homeDir, '.agents', 'skills'),
-      builtIn: true,
-      reservedNames: [],
+      name: 'OpenCode legacy scan',
+      path: path.join(homeDir, '.opencode', 'skills'),
+      managed: false,
+      description: 'Scanned for legacy OpenCode skills only. This path is no longer managed.',
     },
     {
       id: 'claude',
-      name: 'Claude Code',
-      kind: 'claude',
+      name: 'Claude compatibility surface',
       path: path.join(homeDir, '.claude', 'skills'),
-      builtIn: true,
-      reservedNames: [],
+      managed: true,
+      description: 'Managed compatibility layer for Claude.',
+    },
+    {
+      id: 'agents',
+      name: '.agents primary surface',
+      path: path.join(homeDir, '.agents', 'skills'),
+      managed: true,
+      description: 'Primary managed surface used by OpenCode and Codex.',
     },
     {
       id: 'codex',
-      name: 'Codex',
-      kind: 'codex',
+      name: 'Codex legacy scan',
       path: path.join(homeDir, '.codex', 'skills'),
-      builtIn: true,
-      reservedNames: ['.system'],
+      managed: false,
+      description: 'Scanned for legacy Codex skills only. This path is no longer managed.',
     },
   ]
 }
 
-export function createCustomHost(name: string, hostPath: string): CustomHostRecord {
-  return {
-    id: `custom-${randomUUID()}`,
-    name,
-    path: hostPath,
-  }
+export function getManagedSurfaces(homeDir = os.homedir()): ManagedSurfaceDefinition[] {
+  return [
+    {
+      id: 'agents',
+      name: '.agents primary surface',
+      path: path.join(homeDir, '.agents', 'skills'),
+      role: 'primary',
+      description: 'Primary managed surface shared by OpenCode and Codex.',
+    },
+    {
+      id: 'claude',
+      name: 'Claude compatibility surface',
+      path: path.join(homeDir, '.claude', 'skills'),
+      role: 'compatibility',
+      description: 'Compatibility layer that keeps Claude aligned with the primary surface.',
+    },
+  ]
 }
 
 export async function loadConfig(userDataPath: string): Promise<LoadedConfig> {
   const filePath = path.join(userDataPath, 'config.json')
   const stored = await readConfigFile(filePath)
-  const repositoryPath = cleanPath(stored?.repositoryPath) ?? getDefaultRepositoryPath()
-  const customHosts = normalizeCustomHosts(stored?.customHosts ?? [])
 
   return {
     filePath,
-    repositoryPath,
-    customHosts,
-    hosts: [...getBuiltInHosts(), ...toCustomHostDefinitions(customHosts)],
+    repositoryPath: cleanPath(stored?.repositoryPath) ?? getDefaultRepositoryPath(),
   }
 }
 
 export async function saveConfig(config: LoadedConfig): Promise<void> {
   const payload: StoredConfig = {
     repositoryPath: config.repositoryPath,
-    customHosts: config.customHosts,
   }
 
   await fs.mkdir(path.dirname(config.filePath), { recursive: true })
   await fs.writeFile(config.filePath, JSON.stringify(payload, null, 2), 'utf8')
-}
-
-function toCustomHostDefinitions(customHosts: CustomHostRecord[]): HostDefinition[] {
-  return customHosts.map((host) => ({
-    id: host.id,
-    name: host.name,
-    kind: 'custom',
-    path: host.path,
-    builtIn: false,
-    reservedNames: [],
-  }))
 }
 
 async function readConfigFile(filePath: string): Promise<StoredConfig | null> {
@@ -109,16 +100,6 @@ async function readConfigFile(filePath: string): Promise<StoredConfig | null> {
 
     throw error
   }
-}
-
-function normalizeCustomHosts(customHosts: CustomHostRecord[]): CustomHostRecord[] {
-  return customHosts
-    .map((host) => ({
-      id: host.id,
-      name: host.name.trim(),
-      path: cleanPath(host.path) ?? '',
-    }))
-    .filter((host) => host.id && host.name && host.path)
 }
 
 function cleanPath(value: string | undefined | null): string | null {

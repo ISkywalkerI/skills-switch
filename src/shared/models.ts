@@ -1,46 +1,61 @@
-export type CellState = 'enabled' | 'disabled' | 'invalid' | 'orphaned' | 'unavailable'
+export type SkillState = 'enabled' | 'disabled' | 'partial' | 'invalid' | 'needsMigration' | 'conflict'
 
-export type HostKind = 'opencode' | 'claude' | 'codex' | 'custom'
+export type SkillEntryKind = 'link' | 'directory' | 'file'
 
-export interface HostDefinition {
-  id: string
+export type ScanSurfaceId = 'opencode' | 'claude' | 'agents' | 'codex'
+
+export type ManagedSurfaceId = 'agents' | 'claude'
+
+export interface ScanSurfaceDefinition {
+  id: ScanSurfaceId
   name: string
-  kind: HostKind
   path: string
-  builtIn: boolean
-  reservedNames: string[]
+  managed: boolean
+  description: string
 }
 
-export interface HostSummary {
-  enabled: number
-  disabled: number
-  issues: number
+export interface ManagedSurfaceDefinition {
+  id: ManagedSurfaceId
+  name: string
+  path: string
+  role: 'primary' | 'compatibility'
+  description: string
 }
 
-export interface SkillCell {
-  skillName: string
-  hostId: string
-  state: CellState
-  canEnable: boolean
-  canDisable: boolean
-  entryPath: string | null
+export interface ManagedLinkStatus {
+  surfaceId: ManagedSurfaceId
+  surfaceName: string
+  entryPath: string
+  state: 'enabled' | 'missing' | 'invalid'
   targetPath: string | null
   message: string
 }
 
+export interface SkillLocation {
+  surfaceId: ScanSurfaceId
+  surfaceName: string
+  entryPath: string
+  kind: SkillEntryKind
+  targetPath: string | null
+  realPath: string | null
+}
+
 export interface SkillRow {
   skillName: string
-  inRepository: boolean
+  state: SkillState
   repositoryPath: string | null
-  hosts: Record<string, SkillCell>
+  canEnable: boolean
+  canDisable: boolean
+  message: string
+  managedLinks: ManagedLinkStatus[]
+  locations: SkillLocation[]
 }
 
 export interface MigrationPlanItem {
   skillName: string
   sourcePath: string
+  sourceSurfaceName: string
   repositoryPath: string
-  hostIds: string[]
-  hostNames: string[]
 }
 
 export interface MigrationPreview {
@@ -54,8 +69,8 @@ export interface MigrationPreview {
 export interface AppSnapshot {
   repositoryPath: string
   repositoryExists: boolean
-  hosts: HostDefinition[]
-  hostSummaries: Record<string, HostSummary>
+  scanSurfaces: ScanSurfaceDefinition[]
+  managedSurfaces: ManagedSurfaceDefinition[]
   skills: SkillRow[]
   migration: MigrationPreview
   lastUpdated: string
@@ -67,34 +82,26 @@ export interface BasicResponse {
 }
 
 export interface SnapshotResponse extends BasicResponse {
-  snapshot: AppSnapshot
+  snapshot: AppSnapshot | null
 }
 
 export interface ToggleSkillRequest {
-  hostId: string
   skillName: string
   enabled: boolean
-}
-
-export interface AddCustomHostRequest {
-  name: string
-  path: string
 }
 
 export interface UiApi {
   getSnapshot: () => Promise<AppSnapshot>
   toggleSkill: (request: ToggleSkillRequest) => Promise<SnapshotResponse>
-  addCustomHost: (request: AddCustomHostRequest) => Promise<SnapshotResponse>
-  removeCustomHost: (hostId: string) => Promise<SnapshotResponse>
   runMigration: () => Promise<SnapshotResponse>
-  chooseDirectory: () => Promise<string | null>
   openPath: (targetPath: string) => Promise<BasicResponse>
 }
 
-export const CELL_STATE_LABELS: Record<CellState, string> = {
-  enabled: 'Linked',
-  disabled: 'Off',
+export const SKILL_STATE_LABELS: Record<SkillState, string> = {
+  enabled: 'Enabled',
+  disabled: 'Disabled',
+  partial: 'Partial',
   invalid: 'Conflict',
-  orphaned: 'Orphaned',
-  unavailable: 'Unavailable',
+  needsMigration: 'Needs Migration',
+  conflict: 'Conflict',
 }

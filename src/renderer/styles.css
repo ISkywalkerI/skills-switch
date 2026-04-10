@@ -81,9 +81,11 @@ code {
 
 .hero-panel h1,
 .repository-panel h2,
+.surface-section h2,
 .migration-panel h2,
 .matrix-panel h2,
-.host-card h3 {
+.host-card h3,
+.surface-card h3 {
   margin: 0;
   font-family: 'Bahnschrift', 'Segoe UI Variable Display', sans-serif;
   letter-spacing: 0.02em;
@@ -120,13 +122,16 @@ code {
 
 .hero-actions,
 .repository-badge,
+.global-metrics,
 .host-card-header,
 .migration-header,
 .matrix-header,
 .legend-row,
 .host-metrics,
 .skill-name-wrap,
-.state-badge-wrap {
+.state-badge-wrap,
+.inline-actions,
+.skill-actions {
   display: flex;
   gap: 12px;
 }
@@ -216,6 +221,7 @@ code {
 .feedback-banner,
 .loading-panel,
 .repository-panel,
+.surface-section,
 .migration-panel,
 .matrix-panel,
 .host-card {
@@ -234,6 +240,7 @@ code {
 }
 
 .repository-panel,
+.surface-section,
 .migration-panel,
 .matrix-panel {
   display: grid;
@@ -269,16 +276,26 @@ code {
 
 .status-pill.idle,
 .legend-pill.disabled,
+.legend-pill.needsMigration,
 .state-badge.disabled,
+.state-badge.needsMigration,
 .metric-card.available {
   background: rgba(114, 151, 188, 0.14);
   color: #b9d2eb;
 }
 
+.legend-pill.partial,
+.state-badge.partial {
+  background: rgba(255, 223, 132, 0.16);
+  color: #ffe29a;
+}
+
 .legend-pill.invalid,
+.legend-pill.conflict,
 .legend-pill.orphaned,
 .repo-pill.pending,
 .state-badge.invalid,
+.state-badge.conflict,
 .state-badge.orphaned,
 .metric-card.issues {
   background: rgba(255, 158, 104, 0.16);
@@ -343,6 +360,11 @@ code {
   font-size: 1.8rem;
 }
 
+.global-metrics {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .migration-list,
 .issue-block ul {
   display: grid;
@@ -358,7 +380,8 @@ code {
 }
 
 .migration-item h3,
-.issue-block h3 {
+.issue-block h3,
+.surface-card h3 {
   margin: 0;
 }
 
@@ -372,6 +395,89 @@ code {
 .issue-block ul {
   margin: 14px 0 0;
   padding-left: 20px;
+}
+
+.surface-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.surface-grid,
+.skills-list,
+.managed-links-grid,
+.location-list {
+  display: grid;
+  gap: 14px;
+}
+
+.surface-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.surface-card,
+.skill-card,
+.managed-link-card,
+.location-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.skill-card.enabled {
+  border-color: rgba(95, 255, 186, 0.18);
+}
+
+.skill-card.disabled,
+.skill-card.needsMigration {
+  border-color: rgba(114, 151, 188, 0.18);
+}
+
+.skill-card.partial {
+  border-color: rgba(255, 223, 132, 0.2);
+}
+
+.skill-card.invalid,
+.skill-card.conflict,
+.managed-link-card.invalid {
+  border-color: rgba(255, 173, 102, 0.24);
+}
+
+.managed-link-card.enabled {
+  border-color: rgba(95, 255, 186, 0.16);
+}
+
+.skill-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.skill-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.detail-block {
+  display: grid;
+  gap: 12px;
+}
+
+.empty-inline {
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(214, 222, 230, 0.76);
+}
+
+.inline-actions,
+.skill-actions {
+  flex-wrap: wrap;
 }
 
 .matrix-scroll {
@@ -508,21 +614,29 @@ code {
   }
 
   .hero-panel,
-  .repository-panel {
+  .repository-panel,
+  .surface-layout,
+  .skill-detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .hero-panel,
+  .repository-panel {
     display: grid;
   }
 
   .hero-panel,
   .migration-header,
   .matrix-header,
-  .host-card-header {
+  .host-card-header,
+  .skill-card-header {
     gap: 16px;
   }
 
   .hero-actions,
   .migration-header,
-  .matrix-header {
+  .matrix-header,
+  .global-metrics {
     flex-direction: column;
     align-items: stretch;
   }

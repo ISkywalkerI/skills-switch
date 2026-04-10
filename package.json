@@ -2,7 +2,7 @@
   "name": "skills-switch",
   "productName": "Skills Switch",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Desktop GUI for switching agent skills with junction links",
   "main": "dist-electron/electron/main.js",
   "type": "module",
@@ -15,7 +15,7 @@
     "build:renderer": "tsc -p tsconfig.json && vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
     "preview": "vite preview",
-    "dist": "npm run build && electron-builder"
+    "dist": "node -e \"require('fs').rmSync('release', { recursive: true, force: true })\" && npm run build && electron-builder"
   },
   "devDependencies": {
     "@types/node": "^25.5.2",
@@ -47,7 +47,7 @@
     "win": {
       "signAndEditExecutable": false,
       "target": [
-        "portable"
+        "dir"
       ]
     }
   }
