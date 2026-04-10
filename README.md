@@ -6,6 +6,45 @@
 
 It keeps a single central repository as the source of truth, then syncs enabled skills into supported host directories through managed Windows junctions. This helps avoid duplicated copies, drift between hosts, and manual directory maintenance.
 
+## Quick Start
+
+### Option 1: Download and run the release package
+
+1. Go to the project's GitHub `Releases` page
+2. Download the latest release zip package
+3. Extract the zip file to a local folder
+4. Open the extracted folder
+5. Run `Skills Switch.exe`
+
+Notes:
+
+- Do not run the app directly from inside the zip file
+- Keep the extracted folder structure intact
+- If Windows SmartScreen appears, confirm the app manually if you trust the release source
+
+### Option 2: Run from source
+
+```bash
+npm install
+npm run dev
+```
+
+### Build a release package locally
+
+```bash
+npm run build
+npm run dist
+```
+
+Then:
+
+1. Open the app
+2. Click `Rescan`
+3. Click `Migration`
+4. Review `Global Skill Switches` and `Filesystem Surfaces`
+5. Run `Migration Assistant` if legacy skills are detected
+6. Enable the skills you want to sync globally
+
 ## Features
 
 - Scan multiple skill locations and detect existing skills, conflicts, and legacy layouts

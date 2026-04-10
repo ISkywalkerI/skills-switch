@@ -6,6 +6,45 @@
 
 它以中央仓库作为唯一权威来源，再通过受控的 Windows junction 将启用的技能同步到各个宿主目录，减少重复拷贝、宿主之间的状态漂移以及手工维护成本。
 
+## 快速开始
+
+### 方式 1：下载 release 压缩包后直接运行
+
+1. 进入项目的 GitHub `Releases` 页面
+2. 下载最新的 `Skills Switch` zip 压缩包
+3. 将 zip 解压到本地目录
+4. 打开解压后的文件夹
+5. 运行 `Skills Switch.exe`
+
+说明：
+
+- 不要直接在 zip 压缩包内运行程序
+- 请保持解压后的目录结构完整
+- 如果出现 Windows SmartScreen，请在确认来源可信后手动允许运行
+
+### 方式 2：从源码运行
+
+```bash
+npm install
+npm run dev
+```
+
+### 本地构建发布包
+
+```bash
+npm run build
+npm run dist
+```
+
+然后：
+
+1. 打开应用
+2. 点击 `Rescan`
+3. 点击 `Migration`
+4. 查看 `Global Skill Switches` 和 `Filesystem Surfaces`
+5. 如果检测到 legacy skills，则运行 `Migration Assistant`
+6. 启用你想要全局同步的技能
+
 ## 功能特性
 
 - 扫描多个技能路径，识别已有技能、冲突和 legacy 布局
