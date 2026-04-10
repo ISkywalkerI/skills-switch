@@ -126,6 +126,7 @@ code {
 .host-card-header,
 .migration-header,
 .matrix-header,
+.matrix-actions,
 .legend-row,
 .host-metrics,
 .skill-name-wrap,
@@ -141,6 +142,11 @@ code {
 .migration-header,
 .matrix-header {
   align-items: flex-start;
+}
+
+.matrix-actions {
+  flex-direction: column;
+  align-items: flex-end;
 }
 
 .hero-actions {
@@ -381,8 +387,23 @@ code {
 
 .migration-item h3,
 .issue-block h3,
+.warning-block h3,
 .surface-card h3 {
   margin: 0;
+}
+
+.warning-block {
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 187, 96, 0.1);
+  border: 1px solid rgba(255, 187, 96, 0.28);
+}
+
+.warning-block ul {
+  margin: 14px 0 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 12px;
 }
 
 .issue-block {
@@ -405,6 +426,7 @@ code {
 
 .surface-grid,
 .skills-list,
+.skill-switch-list,
 .managed-links-grid,
 .location-list {
   display: grid;
@@ -425,6 +447,43 @@ code {
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.skill-switch-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.skill-switch-row strong {
+  word-break: break-word;
+}
+
+.skill-switch-row .toggle-switch {
+  justify-self: end;
+}
+
+.skill-switch-row.enabled {
+  border-color: rgba(95, 255, 186, 0.18);
+}
+
+.skill-switch-row.disabled,
+.skill-switch-row.needsMigration {
+  border-color: rgba(114, 151, 188, 0.18);
+}
+
+.skill-switch-row.partial {
+  border-color: rgba(255, 223, 132, 0.2);
+}
+
+.skill-switch-row.invalid,
+.skill-switch-row.conflict {
+  border-color: rgba(255, 173, 102, 0.24);
 }
 
 .skill-card.enabled {
@@ -639,6 +698,18 @@ code {
   .global-metrics {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .matrix-actions {
+    align-items: stretch;
+  }
+
+  .skill-switch-row {
+    grid-template-columns: 1fr;
+  }
+
+  .skill-switch-row .toggle-switch {
+    justify-self: start;
   }
 
   .legend-row {

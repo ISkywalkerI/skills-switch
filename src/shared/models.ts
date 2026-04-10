@@ -2,7 +2,7 @@ export type SkillState = 'enabled' | 'disabled' | 'partial' | 'invalid' | 'needs
 
 export type SkillEntryKind = 'link' | 'directory' | 'file'
 
-export type ScanSurfaceId = 'opencode' | 'claude' | 'agents' | 'codex'
+export type ScanSurfaceId = 'opencode' | 'opencodeConfig' | 'claude' | 'agents' | 'codex'
 
 export type ManagedSurfaceId = 'agents' | 'claude'
 
@@ -61,9 +61,12 @@ export interface MigrationPlanItem {
 export interface MigrationPreview {
   needed: boolean
   canRun: boolean
+  forceRequired: boolean
+  cleanupCount: number
   repositoryPath: string
   items: MigrationPlanItem[]
   issues: string[]
+  cleanupWarnings: string[]
 }
 
 export interface AppSnapshot {
@@ -90,10 +93,14 @@ export interface ToggleSkillRequest {
   enabled: boolean
 }
 
+export interface RunMigrationRequest {
+  forceCleanup?: boolean
+}
+
 export interface UiApi {
   getSnapshot: () => Promise<AppSnapshot>
   toggleSkill: (request: ToggleSkillRequest) => Promise<SnapshotResponse>
-  runMigration: () => Promise<SnapshotResponse>
+  runMigration: (request?: RunMigrationRequest) => Promise<SnapshotResponse>
   openPath: (targetPath: string) => Promise<BasicResponse>
 }
 

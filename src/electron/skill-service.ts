@@ -9,6 +9,7 @@ import type {
   ManagedSurfaceDefinition,
   MigrationPlanItem,
   MigrationPreview,
+  RunMigrationRequest,
   ScanSurfaceDefinition,
   ScanSurfaceId,
   SkillLocation,
@@ -38,6 +39,22 @@ interface SourceAssessment {
   message: string
   sourcePath: string | null
   sourceSurfaceName: string | null
+}
+
+interface MigrationCleanupAction {
+  skillName: string
+  surfaceId: ScanSurfaceId
+  surfaceName: string
+  entryPath: string
+}
+
+interface MigrationPlan extends MigrationPreview {
+  cleanupActions: MigrationCleanupAction[]
+}
+
+interface StagedCleanupEntry {
+  finalPath: string
+  tempPath: string
 }
 
 export class SkillService {
@@ -110,25 +127,40 @@ export class SkillService {
     }
   }
 
-  async runMigration(): Promise<SnapshotResponse> {
+  async runMigration(request?: RunMigrationRequest): Promise<SnapshotResponse> {
     try {
       const config = await loadConfig(this.userDataPath)
       const scanSurfaces = getScanSurfaces()
       const managedSurfaces = getManagedSurfaces()
       const scanState = await scanStateForRepository(config.repositoryPath, scanSurfaces)
-      const migration = buildMigrationPreview(config.repositoryPath, scanSurfaces, scanState)
+      const migration = buildMigrationPlan(config.repositoryPath, scanSurfaces, scanState)
 
       if (!migration.canRun) {
         return this.buildResponse(false, 'Migration is blocked. Resolve the listed issues first.')
       }
 
-      if (!migration.items.length) {
-        return this.buildResponse(true, 'Nothing needs to be migrated.')
+      if (migration.forceRequired && !request?.forceCleanup) {
+        return this.buildResponse(
+          false,
+          `Migration needs confirmation because ${migration.cleanupCount} conflicting scanned entries will be removed before sync.`,
+        )
+      }
+
+      if (!migration.items.length && !migration.cleanupActions.length) {
+        return this.buildResponse(true, 'Nothing needs migration or cleanup.')
       }
 
       await fs.mkdir(config.repositoryPath, { recursive: true })
       const movedItems: MigrationPlanItem[] = []
       const linkedSkills: MigrationPlanItem[] = []
+      const stagedCleanupEntries: StagedCleanupEntry[] = []
+      const managedSurfaceIds = new Set(managedSurfaces.map((surface) => surface.id))
+      const skillsToSync = dedupeSkillNames([
+        ...migration.items.map((item) => item.skillName),
+        ...migration.cleanupActions
+          .filter((action) => managedSurfaceIds.has(action.surfaceId as ManagedSurfaceDefinition['id']))
+          .map((action) => action.skillName),
+      ])
 
       try {
         for (const item of migration.items) {
@@ -136,15 +168,39 @@ export class SkillService {
           movedItems.push(item)
         }
 
+        const stagedEntries = await stageCleanupEntries(migration.cleanupActions)
+        stagedCleanupEntries.push(...stagedEntries)
+
         for (const item of migration.items) {
           await removeLegacyEntries(item.skillName, scanSurfaces)
-          const currentEntries = await readManagedEntries(item.skillName, managedSurfaces)
-          const linkResult = await enableManagedSkill(item.skillName, item.repositoryPath, managedSurfaces, currentEntries)
+        }
+
+        for (const skillName of skillsToSync) {
+          const repositoryPath = normalizeFsPath(path.join(config.repositoryPath, skillName))
+          const repositoryEntry = await readEntry(skillName, repositoryPath)
+          if (!repositoryEntry || repositoryEntry.kind === 'file') {
+            throw new Error(`${skillName} is not present as a directory in the central repository after migration.`)
+          }
+
+          const currentEntries = await readManagedEntries(skillName, managedSurfaces)
+          const shouldTrackRollback = hasManagedLinkDrift(repositoryPath, managedSurfaces, currentEntries)
+          const linkResult = await enableManagedSkill(skillName, repositoryPath, managedSurfaces, currentEntries)
           if (!linkResult.ok) {
             throw new Error(linkResult.message)
           }
 
-          linkedSkills.push(item)
+          if (shouldTrackRollback) {
+            linkedSkills.push({
+              skillName,
+              sourcePath: '',
+              sourceSurfaceName: '',
+              repositoryPath,
+            })
+          }
+        }
+
+        for (const stagedEntry of stagedCleanupEntries) {
+          await fs.rm(stagedEntry.tempPath, { recursive: true, force: true, maxRetries: 3 }).catch(() => undefined)
         }
       } catch (error) {
         for (const item of [...linkedSkills].reverse()) {
@@ -157,10 +213,34 @@ export class SkillService {
           }
         }
 
+        for (const stagedEntry of [...stagedCleanupEntries].reverse()) {
+          if (await pathEntryExists(stagedEntry.finalPath)) {
+            await fs.rm(stagedEntry.finalPath, { recursive: true, force: true, maxRetries: 3 }).catch(() => undefined)
+          }
+
+          if (await pathEntryExists(stagedEntry.tempPath)) {
+            await fs.rename(stagedEntry.tempPath, stagedEntry.finalPath).catch(() => undefined)
+          }
+        }
+
         throw error
       }
 
-      return this.buildResponse(true, `Migrated ${migration.items.length} skills into the central repository and synced managed links.`)
+      if (migration.items.length > 0 && migration.cleanupActions.length > 0) {
+        return this.buildResponse(
+          true,
+          `Migrated ${migration.items.length} skills, removed ${migration.cleanupActions.length} conflicting scanned entries, and synced managed links to the central repository.`,
+        )
+      }
+
+      if (migration.items.length > 0) {
+        return this.buildResponse(true, `Migrated ${migration.items.length} skills into the central repository and synced managed links.`)
+      }
+
+      return this.buildResponse(
+        true,
+        `Removed ${migration.cleanupActions.length} conflicting scanned entries and synced managed links to the central repository.`,
+      )
     } catch (error) {
       return this.buildErrorResponse(getErrorMessage(error))
     }
@@ -485,14 +565,81 @@ function assessLegacySources(skillName: string, locations: SkillLocation[]): Sou
   }
 }
 
+function assessRepositoryCleanup(
+  skillName: string,
+  locations: SkillLocation[],
+  repositoryPath: string,
+): { blockingIssues: string[]; cleanupWarnings: string[]; cleanupActions: MigrationCleanupAction[] } {
+  const blockingIssues: string[] = []
+  const cleanupWarnings: string[] = []
+  const cleanupActions: MigrationCleanupAction[] = []
+
+  for (const location of locations) {
+    if (location.kind === 'file') {
+      blockingIssues.push(`${skillName}: ${location.surfaceName} contains a file at ${location.entryPath}.`)
+      continue
+    }
+
+    if (location.realPath && samePath(location.realPath, repositoryPath)) {
+      continue
+    }
+
+    if (location.kind === 'link' && !location.realPath) {
+      cleanupWarnings.push(`${skillName}: ${location.surfaceName} has a broken junction at ${location.entryPath}; force cleanup will remove it.`)
+    } else if (location.realPath) {
+      cleanupWarnings.push(
+        `${skillName}: ${location.surfaceName} still resolves to ${location.realPath} instead of the central repository; force cleanup will replace it.`,
+      )
+    } else {
+      cleanupWarnings.push(
+        `${skillName}: ${location.surfaceName} contains ${location.entryPath} outside the central repository; force cleanup will remove it.`,
+      )
+    }
+
+    cleanupActions.push({
+      skillName,
+      surfaceId: location.surfaceId,
+      surfaceName: location.surfaceName,
+      entryPath: location.entryPath,
+    })
+  }
+
+  return {
+    blockingIssues,
+    cleanupWarnings,
+    cleanupActions,
+  }
+}
+
 function buildMigrationPreview(
   repositoryPath: string,
   scanSurfaces: ScanSurfaceDefinition[],
   scanState: ScanState,
 ): MigrationPreview {
+  const plan = buildMigrationPlan(repositoryPath, scanSurfaces, scanState)
+
+  return {
+    needed: plan.needed,
+    canRun: plan.canRun,
+    forceRequired: plan.forceRequired,
+    cleanupCount: plan.cleanupCount,
+    repositoryPath: plan.repositoryPath,
+    items: plan.items,
+    issues: plan.issues,
+    cleanupWarnings: plan.cleanupWarnings,
+  }
+}
+
+function buildMigrationPlan(
+  repositoryPath: string,
+  scanSurfaces: ScanSurfaceDefinition[],
+  scanState: ScanState,
+): MigrationPlan {
   const skillNames = new Set<string>()
   const items: MigrationPlanItem[] = []
   const issues: string[] = []
+  const cleanupWarnings: string[] = []
+  const cleanupActions: MigrationCleanupAction[] = []
 
   for (const entries of scanState.surfaceEntries.values()) {
     for (const skillName of entries.keys()) {
@@ -505,13 +652,10 @@ function buildMigrationPreview(
     const locations = buildLocations(skillName, scanSurfaces, scanState.surfaceEntries)
 
     if (repositoryEntry) {
-      issues.push(...buildManagedConflictMessages(
-        skillName,
-        getManagedSurfaces(),
-        getManagedSurfaces().map((surface) => scanState.surfaceEntries.get(surface.id)?.get(skillName)),
-        repositoryEntry.path,
-      ))
-      issues.push(...buildLegacyConflictMessages(skillName, locations, repositoryEntry.path))
+      const cleanupAssessment = assessRepositoryCleanup(skillName, locations, repositoryEntry.path)
+      issues.push(...cleanupAssessment.blockingIssues)
+      cleanupWarnings.push(...cleanupAssessment.cleanupWarnings)
+      cleanupActions.push(...cleanupAssessment.cleanupActions)
       continue
     }
 
@@ -529,18 +673,91 @@ function buildMigrationPreview(
     issues.push(assessment.message)
   }
 
+  const dedupedIssues = dedupeMessages(issues)
+  const dedupedWarnings = dedupeMessages(cleanupWarnings)
+  const dedupedCleanupActions = dedupeCleanupActions(cleanupActions)
+  const canRun = (items.length > 0 || dedupedCleanupActions.length > 0) && dedupedIssues.length === 0
+
   return {
-    needed: items.length > 0 || issues.length > 0,
-    canRun: items.length > 0 && issues.length === 0,
+    needed: items.length > 0 || dedupedIssues.length > 0 || dedupedCleanupActions.length > 0,
+    canRun,
+    forceRequired: dedupedCleanupActions.length > 0,
+    cleanupCount: dedupedCleanupActions.length,
     repositoryPath,
     items,
-    issues: dedupeMessages(issues),
+    issues: dedupedIssues,
+    cleanupWarnings: dedupedWarnings,
+    cleanupActions: dedupedCleanupActions,
   }
 }
 
 function canRemoveManagedEntries(entries: Array<RawEntry | undefined>): boolean {
   const existingEntries = entries.filter((entry): entry is RawEntry => Boolean(entry))
   return existingEntries.length > 0 && existingEntries.every((entry) => entry.kind === 'link')
+}
+
+function dedupeCleanupActions(actions: MigrationCleanupAction[]): MigrationCleanupAction[] {
+  const seen = new Set<string>()
+  const deduped: MigrationCleanupAction[] = []
+
+  for (const action of actions) {
+    const key = `${action.skillName}|${toComparisonKey(action.entryPath)}`
+    if (seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    deduped.push(action)
+  }
+
+  return deduped
+}
+
+function dedupeSkillNames(names: string[]): string[] {
+  return [...new Set(names)]
+}
+
+function hasManagedLinkDrift(
+  repositoryPath: string,
+  managedSurfaces: ManagedSurfaceDefinition[],
+  currentEntries: Map<ManagedSurfaceDefinition['id'], RawEntry | null>,
+): boolean {
+  for (const surface of managedSurfaces) {
+    const entry = currentEntries.get(surface.id)
+    if (!entry) {
+      return true
+    }
+
+    if (entry.kind !== 'link' || !entry.realPath || !samePath(entry.realPath, repositoryPath)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+async function stageCleanupEntries(actions: MigrationCleanupAction[]): Promise<StagedCleanupEntry[]> {
+  const stagedEntries: StagedCleanupEntry[] = []
+
+  for (const action of actions) {
+    const entry = await readEntry(path.basename(action.entryPath), action.entryPath)
+    if (!entry) {
+      continue
+    }
+
+    if (entry.kind === 'file') {
+      throw new Error(`${action.skillName}: ${action.surfaceName} contains a file at ${entry.path}. Remove it manually first.`)
+    }
+
+    const tempPath = buildMigrationCleanupTempPath(path.dirname(entry.path), path.basename(entry.path))
+    await fs.rename(entry.path, tempPath)
+    stagedEntries.push({
+      finalPath: entry.path,
+      tempPath,
+    })
+  }
+
+  return stagedEntries
 }
 
 async function readManagedEntries(
@@ -739,6 +956,10 @@ async function rollbackManagedLinks(
 
 function buildTempPath(parentPath: string, skillName: string, action: 'enable' | 'disable'): string {
   return path.join(parentPath, `.${skillName}.skills-switch-${action}-${randomUUID()}`)
+}
+
+function buildMigrationCleanupTempPath(parentPath: string, entryName: string): string {
+  return path.join(parentPath, `.${entryName}.skills-switch-migrate-cleanup-${randomUUID()}`)
 }
 
 function buildAtomicFailureMessage(prefix: string, error: unknown, rollbackErrors: string[]): string {

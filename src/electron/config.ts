@@ -27,6 +27,13 @@ export function getScanSurfaces(homeDir = os.homedir()): ScanSurfaceDefinition[]
       description: 'Scanned for legacy OpenCode skills only. This path is no longer managed.',
     },
     {
+      id: 'opencodeConfig',
+      name: 'OpenCode config scan',
+      path: path.join(homeDir, '.config', 'opencode', 'skills'),
+      managed: false,
+      description: 'Scanned for OpenCode skills under the .config layout.',
+    },
+    {
       id: 'claude',
       name: 'Claude compatibility surface',
       path: path.join(homeDir, '.claude', 'skills'),
