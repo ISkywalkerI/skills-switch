@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { promises as fs } from 'node:fs'
 
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 
 import { SkillService } from './skill-service.js'
 
@@ -11,6 +11,7 @@ const PORTABLE_ENV_KEYS = ['PORTABLE_EXECUTABLE_DIR', 'PORTABLE_EXECUTABLE_FILE'
 let mainWindow: BrowserWindow | null = null
 let startupLogPath: string | null = null
 const clearedPortableEnvKeys = PORTABLE_ENV_KEYS.filter((key) => Boolean(process.env[key]))
+const isWindows = process.platform === 'win32'
 app.commandLine.appendSwitch('disable-gpu-sandbox')
 app.disableHardwareAcceleration()
 for (const key of PORTABLE_ENV_KEYS) {
@@ -36,11 +37,18 @@ async function createMainWindow(): Promise<void> {
     minHeight: 720,
     backgroundColor: '#101317',
     title: 'Skills Switch',
+    frame: false,
+    autoHideMenuBar: true,
+    show: false,
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
     },
+  })
+  mainWindow.setMenuBarVisibility(false)
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show()
   })
 
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedUrl) => {
@@ -61,6 +69,9 @@ async function createMainWindow(): Promise<void> {
 
 app.whenReady().then(async () => {
   app.setName('Skills Switch')
+  if (isWindows) {
+    Menu.setApplicationMenu(null)
+  }
   startupLogPath = path.join(app.getPath('userData'), 'startup.log')
   await fs.mkdir(path.dirname(startupLogPath), { recursive: true })
   await fs.writeFile(startupLogPath, '', 'utf8')
@@ -79,6 +90,32 @@ app.whenReady().then(async () => {
       ok: error.length === 0,
       message: error.length === 0 ? `Opened ${targetPath}.` : error,
     }
+  })
+  ipcMain.handle('window:minimize', (event) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender)
+    senderWindow?.minimize()
+  })
+  ipcMain.handle('window:toggleMaximize', (event) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender)
+    if (!senderWindow) {
+      return false
+    }
+
+    if (senderWindow.isMaximized()) {
+      senderWindow.unmaximize()
+      return false
+    }
+
+    senderWindow.maximize()
+    return true
+  })
+  ipcMain.handle('window:close', (event) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender)
+    senderWindow?.close()
+  })
+  ipcMain.handle('window:isMaximized', (event) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender)
+    return senderWindow?.isMaximized() ?? false
   })
 
   try {

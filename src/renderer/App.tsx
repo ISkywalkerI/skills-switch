@@ -22,9 +22,21 @@ export default function App() {
   const [busyToken, setBusyToken] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard')
+  const [isMaximized, setIsMaximized] = useState(false)
 
   useEffect(() => {
     void refreshSnapshot(true)
+
+    const handleResize = () => {
+      void syncWindowState()
+    }
+
+    void syncWindowState()
+    window.addEventListener('resize', handleResize)
+
+    return () => {
+      window.removeEventListener('resize', handleResize)
+    }
   }, [])
 
   async function refreshSnapshot(clearFeedback = false): Promise<void> {
@@ -115,6 +127,28 @@ export default function App() {
     })
   }
 
+  async function syncWindowState(): Promise<void> {
+    try {
+      const maximized = await window.skillsSwitch.isWindowMaximized()
+      setIsMaximized(maximized)
+    } catch {
+      setIsMaximized(false)
+    }
+  }
+
+  async function handleMinimizeWindow(): Promise<void> {
+    await window.skillsSwitch.minimizeWindow()
+  }
+
+  async function handleToggleMaximizeWindow(): Promise<void> {
+    const maximized = await window.skillsSwitch.toggleMaximizeWindow()
+    setIsMaximized(maximized)
+  }
+
+  async function handleCloseWindow(): Promise<void> {
+    await window.skillsSwitch.closeWindow()
+  }
+
   const isBusy = busyToken !== null
   const enabledCount = snapshot?.skills.filter((skill) => skill.state === 'enabled').length ?? 0
   const migrationCount = snapshot?.skills.filter((skill) => skill.state === 'needsMigration').length ?? 0
@@ -122,214 +156,249 @@ export default function App() {
   return (
     <div className="shell">
       <div className="grain" />
-      <header className="hero-panel">
-        <div>
+      <WindowTitleBar
+        isMaximized={isMaximized}
+        onClose={handleCloseWindow}
+        onMinimize={handleMinimizeWindow}
+        onToggleMaximize={handleToggleMaximizeWindow}
+      />
+      <header className={`hero-panel ${viewMode === 'dashboard' ? 'dashboard-hero-panel' : ''}`}>
+        <div className="hero-copy-block">
           <p className="eyebrow">Global Agent Skill Control Plane</p>
           <h1>Skills Switch</h1>
+          {viewMode === 'dashboard' ? <p className="hero-subtitle">Unified controls, migration status, and live skill toggles.</p> : null}
         </div>
-        <div className="hero-actions">
+        <div className="hero-aside">
+          <div className="hero-actions">
+            {viewMode === 'dashboard' ? (
+              <button className="secondary-button" disabled={isBusy} onClick={() => setViewMode('surfaces')}>
+                Filesystem Surfaces
+              </button>
+            ) : (
+              <button className="ghost-button" disabled={isBusy} onClick={() => setViewMode('dashboard')}>
+                Back to Dashboard
+              </button>
+            )}
+            <button className="primary-button" disabled={isBusy} onClick={() => void refreshSnapshot()}>
+              Rescan
+            </button>
+            <button
+              className="secondary-button"
+              disabled={!snapshot || isBusy}
+              onClick={() => snapshot && void handleOpenPath(snapshot.repositoryPath)}
+            >
+              Open Repository
+            </button>
+          </div>
           {viewMode === 'dashboard' ? (
-            <button className="secondary-button" disabled={isBusy} onClick={() => setViewMode('surfaces')}>
-              Filesystem Surfaces
-            </button>
-          ) : (
-            <button className="ghost-button" disabled={isBusy} onClick={() => setViewMode('dashboard')}>
-              Back to Dashboard
-            </button>
-          )}
-          <button className="primary-button" disabled={isBusy} onClick={() => void refreshSnapshot()}>
-            Rescan
-          </button>
-          <button
-            className="secondary-button"
-            disabled={!snapshot || isBusy}
-            onClick={() => snapshot && void handleOpenPath(snapshot.repositoryPath)}
-          >
-            Open Repository
-          </button>
+            <div className="hero-metrics">
+              <Metric label="Enabled" value={enabledCount} tone="linked" />
+              <Metric label="Needs Migration" value={migrationCount} tone="available" />
+              <Metric label="Issues" value={issueCount} tone="issues" />
+            </div>
+          ) : null}
         </div>
       </header>
 
       {feedback ? <FeedbackBanner feedback={feedback} /> : null}
 
-      {!snapshot ? (
-        <section className="loading-panel">Loading current skill state...</section>
-      ) : (
-        <>
-          {viewMode === 'dashboard' ? (
-            <>
-              <section className="repository-panel card-surface">
-                <div>
-                  <p className="section-label">Central Repository</p>
-                  <h2>{snapshot.repositoryPath}</h2>
-                  <p className="muted-copy">
-                    {snapshot.repositoryExists
-                      ? 'This repository already exists and is the only authoritative skill store.'
-                      : 'The repository will be created automatically when you migrate or enable the first managed skill.'}
-                  </p>
-                </div>
-                <div className="global-metrics">
-                  <Metric label="Enabled" value={enabledCount} tone="linked" />
-                  <Metric label="Needs Migration" value={migrationCount} tone="available" />
-                  <Metric label="Issues" value={issueCount} tone="issues" />
-                </div>
-              </section>
-
-              {snapshot.migration.needed ? (
-                <section className="migration-panel card-surface">
-                  <div className="migration-header">
-                    <div>
-                      <p className="section-label">Migration Assistant</p>
-                      <h2>Move legacy skills into the shared repository</h2>
-                      <p className="muted-copy">
-                        Migration moves the single detected source directory into
-                        <code>{snapshot.migration.repositoryPath}</code>
-                        , removes conflicting scanned entries when needed, then recreates matching links in both managed
-                        surfaces.
-                      </p>
+      <main className="view-content">
+        {!snapshot ? (
+          <section className="loading-panel view-scroll-panel">Loading current skill state...</section>
+        ) : (
+          <>
+            {viewMode === 'dashboard' ? (
+              <div className="dashboard-view">
+                {snapshot.migration.needed ? (
+                  <section className="migration-panel card-surface dashboard-migration-panel">
+                    <div className="migration-header">
+                      <div>
+                        <p className="section-label">Migration Assistant</p>
+                        <h2>Move legacy skills into the shared repository</h2>
+                        <p className="muted-copy">
+                          Migration moves the single detected source directory into
+                          <code>{snapshot.migration.repositoryPath}</code>
+                          , removes conflicting scanned entries when needed, then recreates matching links in both managed
+                          surfaces.
+                        </p>
+                      </div>
+                      <button
+                        className="primary-button"
+                        disabled={!snapshot.migration.canRun || isBusy}
+                        onClick={() => void handleMigration()}
+                      >
+                        Run Migration
+                      </button>
                     </div>
-                    <button
-                      className="primary-button"
-                      disabled={!snapshot.migration.canRun || isBusy}
-                      onClick={() => void handleMigration()}
-                    >
-                      Run Migration
-                    </button>
+
+                    {snapshot.migration.items.length > 0 ? (
+                      <div className="migration-list">
+                        {snapshot.migration.items.map((item) => (
+                          <article className="migration-item" key={item.skillName}>
+                            <div>
+                              <h3>{item.skillName}</h3>
+                              <p className="muted-copy">Source: {item.sourcePath}</p>
+                            </div>
+                            <div>
+                              <p className="migration-meta">Detected in: {item.sourceSurfaceName}</p>
+                              <p className="migration-meta">Target: {item.repositoryPath}</p>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    {snapshot.migration.cleanupWarnings.length > 0 ? (
+                      <div className="warning-block">
+                        <h3>Force cleanup before sync ({snapshot.migration.cleanupCount})</h3>
+                        <ul>
+                          {snapshot.migration.cleanupWarnings.map((warning) => (
+                            <li key={warning}>{warning}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    {snapshot.migration.issues.length > 0 ? (
+                      <div className="issue-block">
+                        <h3>Blocking issues</h3>
+                        <ul>
+                          {snapshot.migration.issues.map((issue) => (
+                            <li key={issue}>{issue}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </section>
+                ) : null}
+
+                <section className="matrix-panel card-surface dashboard-matrix-panel">
+                  <div className="matrix-header">
+                    <div>
+                      <p className="section-label">Global Skill Switches</p>
+                      <h2>One shared enabled state across all hosts</h2>
+                    </div>
+                    <div className="matrix-actions">
+                      <button className="ghost-button" disabled={isBusy} onClick={() => setViewMode('switchDetails')}>
+                        Managed Outputs View
+                      </button>
+                      <div className="legend-row">
+                        {Object.entries(SKILL_STATE_LABELS).map(([state, label]) => (
+                          <span className={`legend-pill ${state}`} key={state}>
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
-                  {snapshot.migration.items.length > 0 ? (
-                    <div className="migration-list">
-                      {snapshot.migration.items.map((item) => (
-                        <article className="migration-item" key={item.skillName}>
-                          <div>
-                            <h3>{item.skillName}</h3>
-                            <p className="muted-copy">Source: {item.sourcePath}</p>
-                          </div>
-                          <div>
-                            <p className="migration-meta">Detected in: {item.sourceSurfaceName}</p>
-                            <p className="migration-meta">Target: {item.repositoryPath}</p>
-                          </div>
-                        </article>
+                  <div className="matrix-panel-body">
+                    {snapshot.skills.length === 0 ? (
+                      <div className="empty-state panel-empty-state">No skills detected yet. Add skills to a scanned path or run migration.</div>
+                    ) : (
+                      <div className="skill-switch-list dashboard-skill-switch-list">
+                        {snapshot.skills.map((skill) => (
+                          <SkillSwitchRow
+                            key={skill.skillName}
+                            busy={busyToken === `toggle:${skill.skillName}` || isBusy}
+                            onToggle={handleToggle}
+                            skill={skill}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </section>
+              </div>
+            ) : null}
+
+            {viewMode === 'surfaces' ? (
+              <section className="surface-section card-surface view-scroll-panel">
+                <div className="matrix-header">
+                  <div>
+                    <p className="section-label">Filesystem Surfaces</p>
+                    <h2>Discovery inputs and managed outputs</h2>
+                  </div>
+                </div>
+
+                <div className="surface-layout">
+                  <div>
+                    <p className="section-label">Managed Outputs</p>
+                    <div className="surface-grid">
+                      {snapshot.managedSurfaces.map((surface) => (
+                        <SurfaceCard key={surface.id} surface={surface} onOpenPath={handleOpenPath} />
                       ))}
                     </div>
-                  ) : null}
+                  </div>
 
-                  {snapshot.migration.cleanupWarnings.length > 0 ? (
-                    <div className="warning-block">
-                      <h3>Force cleanup before sync ({snapshot.migration.cleanupCount})</h3>
-                      <ul>
-                        {snapshot.migration.cleanupWarnings.map((warning) => (
-                          <li key={warning}>{warning}</li>
-                        ))}
-                      </ul>
+                  <div>
+                    <p className="section-label">Scanned Paths</p>
+                    <div className="surface-grid">
+                      {snapshot.scanSurfaces.map((surface) => (
+                        <SurfaceCard key={surface.id} surface={surface} onOpenPath={handleOpenPath} />
+                      ))}
                     </div>
-                  ) : null}
+                  </div>
+                </div>
+              </section>
+            ) : null}
 
-                  {snapshot.migration.issues.length > 0 ? (
-                    <div className="issue-block">
-                      <h3>Blocking issues</h3>
-                      <ul>
-                        {snapshot.migration.issues.map((issue) => (
-                          <li key={issue}>{issue}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                </section>
-              ) : null}
-
-              <section className="matrix-panel card-surface">
+            {viewMode === 'switchDetails' ? (
+              <section className="matrix-panel card-surface view-scroll-panel">
                 <div className="matrix-header">
                   <div>
                     <p className="section-label">Global Skill Switches</p>
-                    <h2>One shared enabled state across all hosts</h2>
-                  </div>
-                  <div className="matrix-actions">
-                    <button className="ghost-button" disabled={isBusy} onClick={() => setViewMode('switchDetails')}>
-                      Managed Outputs View
-                    </button>
-                    <div className="legend-row">
-                      {Object.entries(SKILL_STATE_LABELS).map(([state, label]) => (
-                        <span className={`legend-pill ${state}`} key={state}>
-                          {label}
-                        </span>
-                      ))}
-                    </div>
+                    <h2>Managed Outputs and Detected In</h2>
                   </div>
                 </div>
 
                 {snapshot.skills.length === 0 ? (
                   <div className="empty-state">No skills detected yet. Add skills to a scanned path or run migration.</div>
                 ) : (
-                  <div className="skill-switch-list">
+                  <div className="skills-list">
                     {snapshot.skills.map((skill) => (
-                      <SkillSwitchRow
-                        key={skill.skillName}
-                        busy={busyToken === `toggle:${skill.skillName}` || isBusy}
-                        onToggle={handleToggle}
-                        skill={skill}
-                      />
+                      <SkillDetailCard key={skill.skillName} skill={skill} />
                     ))}
                   </div>
                 )}
               </section>
-            </>
-          ) : null}
-
-          {viewMode === 'surfaces' ? (
-            <section className="surface-section card-surface">
-              <div className="matrix-header">
-                <div>
-                  <p className="section-label">Filesystem Surfaces</p>
-                  <h2>Discovery inputs and managed outputs</h2>
-                </div>
-              </div>
-
-              <div className="surface-layout">
-                <div>
-                  <p className="section-label">Managed Outputs</p>
-                  <div className="surface-grid">
-                    {snapshot.managedSurfaces.map((surface) => (
-                      <SurfaceCard key={surface.id} surface={surface} onOpenPath={handleOpenPath} />
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <p className="section-label">Scanned Paths</p>
-                  <div className="surface-grid">
-                    {snapshot.scanSurfaces.map((surface) => (
-                      <SurfaceCard key={surface.id} surface={surface} onOpenPath={handleOpenPath} />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </section>
-          ) : null}
-
-          {viewMode === 'switchDetails' ? (
-            <section className="matrix-panel card-surface">
-              <div className="matrix-header">
-                <div>
-                  <p className="section-label">Global Skill Switches</p>
-                  <h2>Managed Outputs and Detected In</h2>
-                </div>
-              </div>
-
-              {snapshot.skills.length === 0 ? (
-                <div className="empty-state">No skills detected yet. Add skills to a scanned path or run migration.</div>
-              ) : (
-                <div className="skills-list">
-                  {snapshot.skills.map((skill) => (
-                    <SkillDetailCard key={skill.skillName} skill={skill} />
-                  ))}
-                </div>
-              )}
-            </section>
-          ) : null}
-        </>
-      )}
+            ) : null}
+          </>
+        )}
+      </main>
     </div>
+  )
+}
+
+function WindowTitleBar({
+  isMaximized,
+  onClose,
+  onMinimize,
+  onToggleMaximize,
+}: {
+  isMaximized: boolean
+  onClose: () => Promise<void>
+  onMinimize: () => Promise<void>
+  onToggleMaximize: () => Promise<void>
+}) {
+  return (
+    <header className="window-titlebar">
+      <div className="window-brand" aria-label="App title">
+        <span className="window-brand-badge" aria-hidden="true" />
+        <span className="window-brand-title">Skills Switch</span>
+      </div>
+      <div className="window-controls" aria-label="Window controls">
+        <button className="window-control" type="button" aria-label="Minimize window" onClick={() => void onMinimize()}>
+          <span className="window-control-icon minimize" aria-hidden="true" />
+        </button>
+        <button className="window-control" type="button" aria-label={isMaximized ? 'Restore window' : 'Maximize window'} onClick={() => void onToggleMaximize()}>
+          <span className={`window-control-icon ${isMaximized ? 'restore' : 'maximize'}`} aria-hidden="true" />
+        </button>
+        <button className="window-control close" type="button" aria-label="Close window" onClick={() => void onClose()}>
+          <span className="window-control-icon close" aria-hidden="true" />
+        </button>
+      </div>
+    </header>
   )
 }
 

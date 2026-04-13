@@ -2,9 +2,10 @@
 
 One-click global skill switching, fast and frictionless.
 
+![alt text](<Skills-switch logo with gear and bulb.png>)
 Install and manage skills freely, with zero mental overhead.
-![alt text](image.png)
-![alt text](image-1.png)
+![alt text](image-2.png)
+
 [中文说明 / Chinese Version](./README_CN.md)
 
 Skills Switch focuses on one thing: unified global skill control.

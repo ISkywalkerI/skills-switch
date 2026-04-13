@@ -102,6 +102,10 @@ export interface UiApi {
   toggleSkill: (request: ToggleSkillRequest) => Promise<SnapshotResponse>
   runMigration: (request?: RunMigrationRequest) => Promise<SnapshotResponse>
   openPath: (targetPath: string) => Promise<BasicResponse>
+  minimizeWindow: () => Promise<void>
+  toggleMaximizeWindow: () => Promise<boolean>
+  closeWindow: () => Promise<void>
+  isWindowMaximized: () => Promise<boolean>
 }
 
 export const SKILL_STATE_LABELS: Record<SkillState, string> = {

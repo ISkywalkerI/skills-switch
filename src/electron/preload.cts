@@ -10,6 +10,10 @@ const api: UiApi = {
   toggleSkill: (request: ToggleSkillRequest) => ipcRenderer.invoke('skills:toggleSkill', request),
   runMigration: (request?: RunMigrationRequest) => ipcRenderer.invoke('skills:runMigration', request),
   openPath: (targetPath: string): Promise<BasicResponse> => ipcRenderer.invoke('app:openPath', targetPath),
+  minimizeWindow: (): Promise<void> => ipcRenderer.invoke('window:minimize'),
+  toggleMaximizeWindow: (): Promise<boolean> => ipcRenderer.invoke('window:toggleMaximize'),
+  closeWindow: (): Promise<void> => ipcRenderer.invoke('window:close'),
+  isWindowMaximized: (): Promise<boolean> => ipcRenderer.invoke('window:isMaximized'),
 }
 
 contextBridge.exposeInMainWorld('skillsSwitch', api)
