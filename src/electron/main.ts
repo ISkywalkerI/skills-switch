@@ -28,7 +28,11 @@ async function logStartup(message: string): Promise<void> {
 
 async function createMainWindow(): Promise<void> {
   const preloadPath = path.join(import.meta.dirname, 'preload.cjs')
+  const iconPath = app.isPackaged
+    ? path.join(app.getAppPath(), 'assets', 'icons', 'icon.png')
+    : path.join(process.cwd(), 'assets', 'icons', 'icon.png')
   await logStartup(`createMainWindow preload=${preloadPath}`)
+  await logStartup(`createMainWindow icon=${iconPath}`)
 
   mainWindow = new BrowserWindow({
     width: 1520,
@@ -37,6 +41,7 @@ async function createMainWindow(): Promise<void> {
     minHeight: 720,
     backgroundColor: '#101317',
     title: 'Skills Switch',
+    icon: iconPath,
     frame: false,
     autoHideMenuBar: true,
     show: false,

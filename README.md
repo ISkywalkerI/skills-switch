@@ -2,7 +2,7 @@
 
 One-click global skill switching, fast and frictionless.
 
-![alt text](<Skills-switch logo with gear and bulb.png>)
+![alt text](E:\ZHXH\zh_project\skills-switch\Skills-switch%20logo%20with%20gear%20and%20bulb.png)
 Install and manage skills freely, with zero mental overhead.
 ![alt text](image-2.png)
 
@@ -52,6 +52,12 @@ Then:
 2. Click `Rescan`
 3. Click `Run Migration`
 4. Enable or disable the skills globally
+
+## Recommended skills store and install method
+
+[skills.sh](https://skills.sh/)
+
+Recommend using this website to search for skills, and then use the recommended npx skills add command to install skills.
 
 ## Features
 
@@ -304,7 +310,7 @@ Check these project-specific constraints:
 
 1. `vite.config.ts` must keep `base: './'`
 2. the preload must remain CommonJS: `preload.cts -> preload.cjs`
-3. packaging config must keep `win.signAndEditExecutable: false`
+3. on some Windows setups, `npm run dist` may require elevated privileges because `electron-builder` can fail while extracting `winCodeSign` symlinks
 
 ## Verification
 

@@ -9,6 +9,7 @@ import type {
   SkillLocation,
   SkillRow,
 } from '../shared/models'
+import appIconUrl from '../../assets/icons/icon.png'
 
 type Feedback = {
   tone: 'success' | 'error'
@@ -384,8 +385,7 @@ function WindowTitleBar({
   return (
     <header className="window-titlebar">
       <div className="window-brand" aria-label="App title">
-        <span className="window-brand-badge" aria-hidden="true" />
-        <span className="window-brand-title">Skills Switch</span>
+        <img alt="" aria-hidden="true" className="window-brand-badge" src={appIconUrl} />
       </div>
       <div className="window-controls" aria-label="Window controls">
         <button className="window-control" type="button" aria-label="Minimize window" onClick={() => void onMinimize()}>

@@ -37,15 +37,18 @@
     "appId": "com.zhxh.skills-switch",
     "productName": "Skills Switch",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "assets/icons"
     },
     "files": [
+      "assets/icons/**/*",
       "dist/**/*",
       "dist-electron/**/*",
       "package.json"
     ],
     "win": {
-      "signAndEditExecutable": false,
+      "icon": "icon.ico",
+      "signAndEditExecutable": true,
       "target": [
         "dir"
       ]

@@ -89,25 +89,16 @@ code {
 .window-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 0;
   min-width: 0;
 }
 
 .window-brand-badge {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #ffe3c4, #ff934f 58%, #da6f37);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14);
-}
-
-.window-brand-title {
-  font-size: 0.92rem;
-  letter-spacing: 0.01em;
-  color: rgba(232, 240, 247, 0.94);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  width: 36px;
+  height: 36px;
+  display: block;
+  object-fit: contain;
+  flex: 0 0 auto;
 }
 
 .window-controls {

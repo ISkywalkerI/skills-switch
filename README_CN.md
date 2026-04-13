@@ -2,8 +2,12 @@
 
 方便快捷的全局 Skills 一键开关！
 
-让你能够没有心理负担，随心所欲地安装 skills。
+![alt text](E:\ZHXH\zh_project\skills-switch\Skills-switch%20logo%20with%20gear%20and%20bulb.png)
 
+安装和管理技能，无需额外的思考和操作。
+
+让你能够没有心理负担，随心所欲地安装 skills。
+![alt text](image-2.png)
 [English README](./README.md)
 
 `Skills Switch` 专注于一件事：全局统一控制 skills。
@@ -50,6 +54,12 @@ npm run dist
 2. 点击 `Rescan`
 3. 点击 `Run Migration`
 4. 启用或禁用你想要全局同步的技能
+
+## 推荐的 skills 存储和安装方法
+
+[skills.sh](https://skills.sh/)
+
+推荐使用此网站来搜索skills, 并通过推荐的npx skills add 命令来安装 skills。
 
 ## 功能特性
 
@@ -296,7 +306,7 @@ npm run dist
 
 1. `vite.config.ts` 是否保持 `base: './'`
 2. preload 是否仍为 CommonJS，即 `preload.cts -> preload.cjs`
-3. 打包配置是否保留 `win.signAndEditExecutable: false`
+3. 在部分 Windows 环境中，`npm run dist` 可能仍需要管理员权限，因为 `electron-builder` 在解压 `winCodeSign` 符号链接时可能失败
 
 ## 验证建议
 

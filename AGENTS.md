@@ -16,7 +16,9 @@
 - `vite.config.ts` must keep `base: './'`. Using `/assets/...` breaks the packaged `file://` app and causes a black screen.
 - Preload must stay CommonJS (`src/electron/preload.cts` -> `dist-electron/electron/preload.cjs`). An ESM preload fails with `Cannot use import statement outside a module` and `window.skillsSwitch` becomes undefined.
 - `npm run dist` outputs to `release/win-unpacked/` only. Publish by zipping that directory instead of generating an `.exe` artifact.
-- `electron-builder` must keep `win.signAndEditExecutable: false`. Removing it can fail on Windows due to `winCodeSign` symlink extraction permissions.
+- Windows packaging now uses `win.signAndEditExecutable: true` so the configured EXE icon is written during packaging.
+- On some Windows setups, `npm run dist` may still need elevated privileges because `electron-builder` can fail while extracting `winCodeSign` symlinks.
+- After replacing the EXE icon, Windows Explorer may continue showing the old icon until its icon cache is refreshed or the executable name changes.
 
 ## Project Structure
 - `src/electron/config.ts`: default repository path, built-in host definitions, persisted config loading/saving.
