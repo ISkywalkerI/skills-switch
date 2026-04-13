@@ -85,7 +85,3 @@ Please describe:
 - the problem you are trying to solve
 - the proposed behavior
 - any constraints or edge cases you already know about
-
-## Code of Conduct
-
-By participating in this project, you agree to follow the rules in `CODE_OF_CONDUCT.md`.

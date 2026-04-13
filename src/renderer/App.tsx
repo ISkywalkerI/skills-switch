@@ -119,13 +119,6 @@ export default function App() {
   const enabledCount = snapshot?.skills.filter((skill) => skill.state === 'enabled').length ?? 0
   const migrationCount = snapshot?.skills.filter((skill) => skill.state === 'needsMigration').length ?? 0
   const issueCount = snapshot?.skills.filter((skill) => skill.state === 'invalid' || skill.state === 'conflict' || skill.state === 'partial').length ?? 0
-  const heroCopy = viewMode === 'dashboard'
-    ? 'Scan legacy skill roots, keep one central repository authoritative, and mirror every enabled skill into '
-      + '~/.agents/skills and ~/.claude/skills together.'
-    : viewMode === 'surfaces'
-      ? 'Review every scanned filesystem input and managed output path from a dedicated view.'
-      : 'Review Managed Outputs and Detected In details in a focused secondary view.'
-
   return (
     <div className="shell">
       <div className="grain" />
@@ -133,7 +126,6 @@ export default function App() {
         <div>
           <p className="eyebrow">Global Agent Skill Control Plane</p>
           <h1>Skills Switch</h1>
-          <p className="hero-copy">{heroCopy}</p>
         </div>
         <div className="hero-actions">
           {viewMode === 'dashboard' ? (
