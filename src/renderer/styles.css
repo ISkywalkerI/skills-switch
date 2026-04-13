@@ -74,8 +74,9 @@ code {
 .hero-panel {
   display: flex;
   justify-content: space-between;
-  gap: 24px;
-  padding: 28px 32px;
+  align-items: center;
+  gap: 18px;
+  padding: 22px 28px;
   border-radius: 28px;
 }
 
@@ -92,7 +93,7 @@ code {
 }
 
 .hero-panel h1 {
-  font-size: clamp(2.6rem, 4vw, 4.6rem);
+  font-size: clamp(2.35rem, 3.7vw, 4.2rem);
 }
 
 .eyebrow,
@@ -103,6 +104,10 @@ code {
   letter-spacing: 0.16em;
   font-size: 0.74rem;
   color: rgba(171, 187, 201, 0.72);
+}
+
+.eyebrow {
+  margin: 0 0 6px;
 }
 
 .hero-copy,
@@ -152,7 +157,7 @@ code {
 .hero-actions {
   justify-content: flex-end;
   flex-wrap: wrap;
-  min-width: 240px;
+  min-width: 220px;
 }
 
 .primary-button,
@@ -689,7 +694,7 @@ code {
   .matrix-header,
   .host-card-header,
   .skill-card-header {
-    gap: 16px;
+    gap: 14px;
   }
 
   .hero-actions,
