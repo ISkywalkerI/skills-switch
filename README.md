@@ -2,9 +2,9 @@
 
 One-click global skill switching, fast and frictionless.
 
-![alt text](assets\skillswitch.png)
+![alt text](assets/skillswitch.png)
 Install and manage skills freely, with zero mental overhead.
-![alt text](assets\image.png)
+![alt text](assets/image.png)
 
 [中文说明 / Chinese Version](./README_CN.md)
 
