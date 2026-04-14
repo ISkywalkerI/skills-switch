@@ -35,10 +35,10 @@ async function createMainWindow(): Promise<void> {
   await logStartup(`createMainWindow icon=${iconPath}`)
 
   mainWindow = new BrowserWindow({
-    width: 1520,
-    height: 960,
-    minWidth: 1160,
-    minHeight: 720,
+    width: 1160,
+    height: 720,
+    minWidth: 900,
+    minHeight: 600,
     backgroundColor: '#101317',
     title: 'Skills Switch',
     icon: iconPath,

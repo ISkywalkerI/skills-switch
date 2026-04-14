@@ -3,10 +3,8 @@ import { useEffect, useState } from 'react'
 import { SKILL_STATE_LABELS } from '../shared/models'
 import type {
   AppSnapshot,
-  ManagedLinkStatus,
   ManagedSurfaceDefinition,
   ScanSurfaceDefinition,
-  SkillLocation,
   SkillRow,
 } from '../shared/models'
 import appIconUrl from '../../assets/icons/icon.png'
@@ -16,7 +14,7 @@ type Feedback = {
   text: string
 }
 
-type ViewMode = 'dashboard' | 'surfaces' | 'switchDetails'
+type ViewMode = 'dashboard' | 'surfaces'
 
 export default function App() {
   const [snapshot, setSnapshot] = useState<AppSnapshot | null>(null)
@@ -165,9 +163,13 @@ export default function App() {
       />
       <header className={`hero-panel ${viewMode === 'dashboard' ? 'dashboard-hero-panel' : ''}`}>
         <div className="hero-copy-block">
-          <p className="eyebrow">Global Agent Skill Control Plane</p>
-          <h1>Skills Switch</h1>
-          {viewMode === 'dashboard' ? <p className="hero-subtitle">Unified controls, migration status, and live skill toggles.</p> : null}
+          {viewMode === 'dashboard' ? (
+            <div className="hero-metrics hero-metrics-inline">
+              <Metric label="Enabled" value={enabledCount} tone="linked" />
+              <Metric label="Needs Migration" value={migrationCount} tone="available" />
+              <Metric label="Issues" value={issueCount} tone="issues" />
+            </div>
+          ) : null}
         </div>
         <div className="hero-aside">
           <div className="hero-actions">
@@ -191,13 +193,6 @@ export default function App() {
               Open Repository
             </button>
           </div>
-          {viewMode === 'dashboard' ? (
-            <div className="hero-metrics">
-              <Metric label="Enabled" value={enabledCount} tone="linked" />
-              <Metric label="Needs Migration" value={migrationCount} tone="available" />
-              <Metric label="Issues" value={issueCount} tone="issues" />
-            </div>
-          ) : null}
         </div>
       </header>
 
@@ -275,14 +270,8 @@ export default function App() {
 
                 <section className="matrix-panel card-surface dashboard-matrix-panel">
                   <div className="matrix-header">
-                    <div>
-                      <p className="section-label">Global Skill Switches</p>
-                      <h2>One shared enabled state across all hosts</h2>
-                    </div>
-                    <div className="matrix-actions">
-                      <button className="ghost-button" disabled={isBusy} onClick={() => setViewMode('switchDetails')}>
-                        Managed Outputs View
-                      </button>
+                    <p className="section-label">Global Skill Switches</p>
+                    <div className="matrix-actions compact">
                       <div className="legend-row">
                         {Object.entries(SKILL_STATE_LABELS).map(([state, label]) => (
                           <span className={`legend-pill ${state}`} key={state}>
@@ -343,27 +332,6 @@ export default function App() {
                 </div>
               </section>
             ) : null}
-
-            {viewMode === 'switchDetails' ? (
-              <section className="matrix-panel card-surface view-scroll-panel">
-                <div className="matrix-header">
-                  <div>
-                    <p className="section-label">Global Skill Switches</p>
-                    <h2>Managed Outputs and Detected In</h2>
-                  </div>
-                </div>
-
-                {snapshot.skills.length === 0 ? (
-                  <div className="empty-state">No skills detected yet. Add skills to a scanned path or run migration.</div>
-                ) : (
-                  <div className="skills-list">
-                    {snapshot.skills.map((skill) => (
-                      <SkillDetailCard key={skill.skillName} skill={skill} />
-                    ))}
-                  </div>
-                )}
-              </section>
-            ) : null}
           </>
         )}
       </main>
@@ -386,6 +354,7 @@ function WindowTitleBar({
     <header className="window-titlebar">
       <div className="window-brand" aria-label="App title">
         <img alt="" aria-hidden="true" className="window-brand-badge" src={appIconUrl} />
+        <span className="window-brand-title">Skills Switch</span>
       </div>
       <div className="window-controls" aria-label="Window controls">
         <button className="window-control" type="button" aria-label="Minimize window" onClick={() => void onMinimize()}>
@@ -409,8 +378,8 @@ function FeedbackBanner({ feedback }: { feedback: Feedback }) {
 function Metric({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
     <div className={`metric-card ${tone}`}>
-      <span>{label}</span>
       <strong>{value}</strong>
+      <span>{label}</span>
     </div>
   )
 }
@@ -481,93 +450,6 @@ function SurfaceCard({
         Open Directory
       </button>
     </article>
-  )
-}
-
-function SkillDetailCard({
-  skill,
-}: {
-  skill: SkillRow
-}) {
-  return (
-    <article className={`skill-card ${skill.state}`}>
-      <div className="skill-card-header">
-        <div>
-          <div className="skill-name-wrap">
-            <strong>{skill.skillName}</strong>
-            <span className={`state-badge ${skill.state}`}>{SKILL_STATE_LABELS[skill.state]}</span>
-          </div>
-          <p className="skill-path">{skill.repositoryPath ?? 'No central copy yet'}</p>
-        </div>
-      </div>
-
-      <p className="muted-copy">{skill.message}</p>
-
-      <div className="skill-detail-grid">
-        <div className="detail-block">
-          <p className="section-label">Managed Outputs</p>
-          <div className="managed-links-grid">
-            {skill.managedLinks.map((link) => (
-              <ManagedLinkCard key={link.surfaceId} link={link} />
-            ))}
-          </div>
-        </div>
-
-        <div className="detail-block">
-          <p className="section-label">Detected In</p>
-          {skill.locations.length === 0 ? (
-            <div className="empty-inline">Only the central repository copy exists.</div>
-          ) : (
-            <div className="location-list">
-              {skill.locations.map((location) => (
-                <LocationCard key={`${location.surfaceId}:${location.entryPath}`} location={location} />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </article>
-  )
-}
-
-function ManagedLinkCard({
-  link,
-}: {
-  link: ManagedLinkStatus
-}) {
-  const badgeTone = link.state === 'enabled' ? 'enabled' : link.state === 'missing' ? 'disabled' : 'invalid'
-  const badgeLabel = link.state === 'enabled' ? 'Linked' : link.state === 'missing' ? 'Missing' : 'Conflict'
-
-  return (
-    <div className={`managed-link-card ${link.state}`}>
-      <div className="skill-name-wrap">
-        <strong>{link.surfaceName}</strong>
-        <span className={`state-badge ${badgeTone}`}>{badgeLabel}</span>
-      </div>
-      <span className="skill-path">{link.entryPath}</span>
-      {link.targetPath ? <p className="muted-copy">Target: {link.targetPath}</p> : null}
-      <p className="muted-copy">{link.message}</p>
-    </div>
-  )
-}
-
-function LocationCard({
-  location,
-}: {
-  location: SkillLocation
-}) {
-  const kindLabel = location.kind === 'link' ? 'Junction' : location.kind === 'directory' ? 'Directory' : 'File'
-
-  return (
-    <div className="location-card">
-      <div className="skill-name-wrap">
-        <strong>{location.surfaceName}</strong>
-        <span className="repo-pill pending">{kindLabel}</span>
-      </div>
-      <span className="skill-path">{location.entryPath}</span>
-      {location.targetPath ? <p className="muted-copy">Target: {location.targetPath}</p> : null}
-      {location.realPath ? <p className="muted-copy">Resolved: {location.realPath}</p> : null}
-    </div>
   )
 }
 

@@ -2,12 +2,12 @@
 
 方便快捷的全局 Skills 一键开关！
 
-![alt text](E:\ZHXH\zh_project\skills-switch\Skills-switch%20logo%20with%20gear%20and%20bulb.png)
+![alt text](assets\skillswitch.png)
 
 安装和管理技能，无需额外的思考和操作。
 
 让你能够没有心理负担，随心所欲地安装 skills。
-![alt text](image-2.png)
+![alt text](assets\image.png)
 [English README](./README.md)
 
 `Skills Switch` 专注于一件事：全局统一控制 skills。
@@ -60,6 +60,12 @@ npm run dist
 [skills.sh](https://skills.sh/)
 
 推荐使用此网站来搜索skills, 并通过推荐的npx skills add 命令来安装 skills。
+
+## 支持的Agent Hosts
+- OpenCode
+- Claude Code
+- Codex
+- Trae
 
 ## 功能特性
 

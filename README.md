@@ -2,9 +2,9 @@
 
 One-click global skill switching, fast and frictionless.
 
-![alt text](E:\ZHXH\zh_project\skills-switch\Skills-switch%20logo%20with%20gear%20and%20bulb.png)
+![alt text](assets\skillswitch.png)
 Install and manage skills freely, with zero mental overhead.
-![alt text](image-2.png)
+![alt text](assets\image.png)
 
 [中文说明 / Chinese Version](./README_CN.md)
 
@@ -58,6 +58,14 @@ Then:
 [skills.sh](https://skills.sh/)
 
 Recommend using this website to search for skills, and then use the recommended npx skills add command to install skills.
+
+
+## Supported Agent Hosts
+
+- OpenCode
+- Claude Code
+- Codex
+- Trae
 
 ## Features
 

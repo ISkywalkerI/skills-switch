@@ -89,8 +89,16 @@ code {
 .window-brand {
   display: flex;
   align-items: center;
-  gap: 0;
+  gap: 10px;
   min-width: 0;
+}
+
+.window-brand-title {
+  font-family: 'Bahnschrift', 'Segoe UI Variable Display', sans-serif;
+  font-size: 0.98rem;
+  letter-spacing: 0.03em;
+  color: rgba(237, 241, 245, 0.94);
+  white-space: nowrap;
 }
 
 .window-brand-badge {
@@ -213,35 +221,27 @@ code {
 .hero-panel {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 18px;
-  padding: 24px 28px;
+  padding: 16px 28px;
   border-radius: 28px;
 }
 
 .dashboard-hero-panel {
-  align-items: stretch;
+  align-items: center;
 }
 
 .hero-copy-block {
   min-width: 0;
   display: grid;
-  gap: 8px;
-}
-
-.hero-subtitle {
-  margin: 0;
-  max-width: 36rem;
-  color: rgba(210, 222, 232, 0.72);
-  font-size: 0.98rem;
-  line-height: 1.45;
+  gap: 10px;
 }
 
 .hero-aside {
   display: grid;
-  gap: 16px;
+  gap: 10px;
   justify-items: end;
-  min-width: 320px;
+  min-width: 280px;
 }
 
 .hero-metrics {
@@ -249,6 +249,10 @@ code {
   grid-template-columns: repeat(3, minmax(112px, 1fr));
   gap: 12px;
   width: 100%;
+}
+
+.hero-metrics-inline {
+  width: auto;
 }
 
 .hero-panel h1,
@@ -323,6 +327,10 @@ code {
 .matrix-actions {
   flex-direction: column;
   align-items: flex-end;
+}
+
+.matrix-actions.compact {
+  gap: 8px;
 }
 
 .hero-actions {
@@ -516,6 +524,11 @@ code {
   justify-content: space-between;
 }
 
+.matrix-header {
+  align-items: center;
+  gap: 16px;
+}
+
 .path-chip {
   margin: 0;
   padding: 12px 14px;
@@ -530,6 +543,9 @@ code {
 
 .metric-card {
   flex: 1 1 96px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   padding: 12px 14px;
   border-radius: 18px;
   min-width: 88px;
@@ -545,23 +561,33 @@ code {
 
 .metric-card strong {
   display: block;
-  margin-top: 8px;
   font-size: 1.8rem;
+  line-height: 1;
 }
 
 .hero-metrics .metric-card {
   min-width: 0;
-  padding: 12px 14px 14px;
+  gap: 16px;
+  padding: 10px 14px;
   border-radius: 20px;
 }
 
 .hero-metrics .metric-card span {
-  font-size: 0.7rem;
+  font-size: 0.68rem;
+  line-height: 1.2;
 }
 
 .hero-metrics .metric-card strong {
-  margin-top: 6px;
-  font-size: 2rem;
+  font-size: 1.8rem;
+  flex: 0 0 auto;
+}
+
+.hero-metrics-inline .metric-card {
+  min-width: 132px;
+}
+
+.dashboard-matrix-panel .matrix-header {
+  margin-bottom: -2px;
 }
 
 .global-metrics {
@@ -933,6 +959,10 @@ code {
     justify-items: stretch;
   }
 
+  .hero-metrics-inline {
+    width: 100%;
+  }
+
   .hero-aside {
     min-width: 0;
   }
@@ -987,6 +1017,10 @@ code {
 }
 
 @media (max-width: 720px) {
+  .window-brand-title {
+    display: none;
+  }
+
   .hero-metrics {
     grid-template-columns: 1fr;
   }

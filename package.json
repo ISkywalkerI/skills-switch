@@ -2,7 +2,7 @@
   "name": "skills-switch",
   "productName": "Skills Switch",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Desktop GUI for switching agent skills with junction links",
   "main": "dist-electron/electron/main.js",
   "type": "module",
@@ -34,7 +34,7 @@
     "react-dom": "^19.2.4"
   },
   "build": {
-    "appId": "com.zhxh.skills-switch",
+    "appId": "com.github.iskywalkeri.skills-switch",
     "productName": "Skills Switch",
     "directories": {
       "output": "release",
