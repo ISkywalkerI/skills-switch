@@ -197,12 +197,16 @@ async function readConfigFile(filePath: string): Promise<StoredConfig | null> {
 
 function cleanPath(value: string | undefined | null): string | null {
   const trimmed = value?.trim()
-  return trimmed ? path.normalize(trimmed) : null
+  return trimmed ? normalizeComparablePath(trimmed) : null
 }
 
-function loadPathList(storedPaths: string[] | undefined, fallbackPaths: string[]): string[] {
-  if (!storedPaths || storedPaths.length === 0) {
+function loadPathList(storedPaths: string[] | undefined | null, fallbackPaths: string[]): string[] {
+  if (storedPaths === undefined) {
     return [...fallbackPaths]
+  }
+
+  if (storedPaths === null) {
+    return []
   }
 
   return dedupePaths(
@@ -254,5 +258,16 @@ function samePath(left: string, right: string): boolean {
 }
 
 function toComparisonKey(entryPath: string): string {
-  return path.normalize(entryPath).toLowerCase()
+  return normalizeComparablePath(entryPath).toLowerCase()
+}
+
+function normalizeComparablePath(entryPath: string): string {
+  let normalized = path.normalize(entryPath)
+  const root = path.parse(normalized).root
+
+  while (normalized.length > root.length && /[\\/]$/.test(normalized)) {
+    normalized = normalized.slice(0, -1)
+  }
+
+  return normalized
 }

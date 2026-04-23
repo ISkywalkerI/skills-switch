@@ -1235,6 +1235,11 @@ function normalizeFsPath(entryPath: string): string {
     normalized = normalized.slice(4)
   }
 
+  const root = path.parse(normalized).root
+  while (normalized.length > root.length && /[\\/]$/.test(normalized)) {
+    normalized = normalized.slice(0, -1)
+  }
+
   return normalized
 }
 
