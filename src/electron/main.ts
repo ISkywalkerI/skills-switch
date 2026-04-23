@@ -89,6 +89,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('skills:getSnapshot', () => skillService.getSnapshot())
   ipcMain.handle('skills:toggleSkill', (_event, request) => skillService.toggleSkill(request))
   ipcMain.handle('skills:runMigration', (_event, request) => skillService.runMigration(request))
+  ipcMain.handle('settings:save', (_event, request) => skillService.saveSettings(request))
   ipcMain.handle('app:openPath', async (_event, targetPath) => {
     const error = await shell.openPath(targetPath)
     return {

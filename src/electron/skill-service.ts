@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 
-import { getManagedSurfaces, getScanSurfaces, loadConfig } from './config.js'
+import { getManagedSurfaces, getScanSurfaces, loadConfig, normalizeSettingsForSave, saveConfig } from './config.js'
 import type {
   AppSnapshot,
   ManagedLinkStatus,
@@ -12,6 +12,7 @@ import type {
   RunMigrationRequest,
   ScanSurfaceDefinition,
   ScanSurfaceId,
+  SaveSettingsRequest,
   SkillLocation,
   SkillRow,
   SkillState,
@@ -31,7 +32,8 @@ interface RawEntry {
 
 interface ScanState {
   repositoryEntries: Map<string, RawEntry>
-  surfaceEntries: Map<ScanSurfaceId, Map<string, RawEntry>>
+  scanSurfaceEntries: Map<ScanSurfaceId, Map<string, RawEntry>>
+  managedSurfaceEntries: Map<ManagedSurfaceDefinition['id'], Map<string, RawEntry>>
 }
 
 interface SourceAssessment {
@@ -62,21 +64,54 @@ export class SkillService {
 
   async getSnapshot(): Promise<AppSnapshot> {
     const config = await loadConfig(this.userDataPath)
-    const scanSurfaces = getScanSurfaces()
-    const managedSurfaces = getManagedSurfaces()
-    const scanState = await scanStateForRepository(config.repositoryPath, scanSurfaces)
+    return this.createSnapshot(config)
+  }
+
+  async saveSettings(request: SaveSettingsRequest): Promise<SnapshotResponse> {
+    try {
+      const currentConfig = await loadConfig(this.userDataPath)
+      const currentSnapshot = await this.createSnapshot(currentConfig)
+      const settings = normalizeSettingsForSave(request)
+      const nextConfig = {
+        ...currentConfig,
+        settings,
+        managedSurfaces: getManagedSurfaces(settings),
+        scanSurfaces: getScanSurfaces(settings),
+      }
+
+      await saveConfig(nextConfig)
+
+      try {
+        await syncManagedOutputSelection(currentConfig.managedSurfaces, nextConfig.managedSurfaces, currentSnapshot.skills)
+        return await this.buildResponse(true, 'Settings saved successfully.')
+      } catch (error) {
+        return await this.buildResponse(false, `Settings were saved, but managed output sync failed: ${getErrorMessage(error)}`)
+      }
+    } catch (error) {
+      return this.buildErrorResponse(getErrorMessage(error))
+    }
+  }
+
+  private async createSnapshot(config: Awaited<ReturnType<typeof loadConfig>>): Promise<AppSnapshot> {
+    const scanState = await scanStateForRepository(config.repositoryPath, config.scanSurfaces, config.managedSurfaces)
     const repositoryExists = await pathExists(config.repositoryPath)
-    const migration = buildMigrationPreview(config.repositoryPath, scanSurfaces, scanState)
+    const migration = buildMigrationPreview(config.repositoryPath, config.scanSurfaces, config.managedSurfaces, scanState)
 
     const skillNames = new Set<string>(scanState.repositoryEntries.keys())
-    for (const entries of scanState.surfaceEntries.values()) {
+    for (const entries of scanState.scanSurfaceEntries.values()) {
+      for (const skillName of entries.keys()) {
+        skillNames.add(skillName)
+      }
+    }
+
+    for (const entries of scanState.managedSurfaceEntries.values()) {
       for (const skillName of entries.keys()) {
         skillNames.add(skillName)
       }
     }
 
     const skills = [...skillNames]
-      .map((skillName) => buildSkillRow(skillName, scanSurfaces, managedSurfaces, scanState))
+      .map((skillName) => buildSkillRow(skillName, config.scanSurfaces, config.managedSurfaces, scanState))
       .sort((left, right) => {
         const stateOrder: Record<SkillState, number> = {
           invalid: 0,
@@ -97,8 +132,10 @@ export class SkillService {
     return {
       repositoryPath: config.repositoryPath,
       repositoryExists,
-      scanSurfaces,
-      managedSurfaces,
+      settings: config.settings,
+      settingsDefaults: config.settingsDefaults,
+      scanSurfaces: config.scanSurfaces,
+      managedSurfaces: config.managedSurfaces,
       skills,
       migration,
       lastUpdated: new Date().toISOString(),
@@ -108,7 +145,6 @@ export class SkillService {
   async toggleSkill(request: ToggleSkillRequest): Promise<SnapshotResponse> {
     try {
       const config = await loadConfig(this.userDataPath)
-      const managedSurfaces = getManagedSurfaces()
       const repositoryEntryPath = normalizeFsPath(path.join(config.repositoryPath, request.skillName))
       const repositoryEntry = await readEntry(request.skillName, repositoryEntryPath)
 
@@ -116,10 +152,10 @@ export class SkillService {
         return this.buildResponse(false, `${request.skillName} is not present in the central repository. Run migration first.`)
       }
 
-      const currentEntries = await readManagedEntries(request.skillName, managedSurfaces)
+      const currentEntries = await readManagedEntries(request.skillName, config.managedSurfaces)
       const result = request.enabled
-        ? await enableManagedSkill(request.skillName, repositoryEntryPath, managedSurfaces, currentEntries)
-        : await disableManagedSkill(request.skillName, repositoryEntryPath, managedSurfaces, currentEntries)
+        ? await enableManagedSkill(request.skillName, repositoryEntryPath, config.managedSurfaces, currentEntries)
+        : await disableManagedSkill(request.skillName, repositoryEntryPath, config.managedSurfaces, currentEntries)
 
       return this.buildResponse(result.ok, result.message)
     } catch (error) {
@@ -130,10 +166,8 @@ export class SkillService {
   async runMigration(request?: RunMigrationRequest): Promise<SnapshotResponse> {
     try {
       const config = await loadConfig(this.userDataPath)
-      const scanSurfaces = getScanSurfaces()
-      const managedSurfaces = getManagedSurfaces()
-      const scanState = await scanStateForRepository(config.repositoryPath, scanSurfaces)
-      const migration = buildMigrationPlan(config.repositoryPath, scanSurfaces, scanState)
+      const scanState = await scanStateForRepository(config.repositoryPath, config.scanSurfaces, config.managedSurfaces)
+      const migration = buildMigrationPlan(config.repositoryPath, config.scanSurfaces, config.managedSurfaces, scanState)
 
       if (!migration.canRun) {
         return this.buildResponse(false, 'Migration is blocked. Resolve the listed issues first.')
@@ -142,7 +176,7 @@ export class SkillService {
       if (migration.forceRequired && !request?.forceCleanup) {
         return this.buildResponse(
           false,
-          `Migration needs confirmation because ${migration.cleanupCount} conflicting scanned entries will be removed before sync.`,
+          `Migration needs confirmation because ${migration.cleanupCount} conflicting filesystem entries will be removed before sync.`,
         )
       }
 
@@ -154,11 +188,11 @@ export class SkillService {
       const movedItems: MigrationPlanItem[] = []
       const linkedSkills: MigrationPlanItem[] = []
       const stagedCleanupEntries: StagedCleanupEntry[] = []
-      const managedSurfaceIds = new Set(managedSurfaces.map((surface) => surface.id))
+      const managedSurfacePaths = new Set(config.managedSurfaces.map((surface) => toComparisonKey(surface.path)))
       const skillsToSync = dedupeSkillNames([
         ...migration.items.map((item) => item.skillName),
         ...migration.cleanupActions
-          .filter((action) => managedSurfaceIds.has(action.surfaceId as ManagedSurfaceDefinition['id']))
+          .filter((action) => managedSurfacePaths.has(toComparisonKey(path.dirname(action.entryPath))))
           .map((action) => action.skillName),
       ])
 
@@ -172,19 +206,23 @@ export class SkillService {
         stagedCleanupEntries.push(...stagedEntries)
 
         for (const item of migration.items) {
-          await removeLegacyEntries(item.skillName, scanSurfaces)
+          await removeLegacyEntries(item.skillName, dedupeSurfacePaths([...config.scanSurfaces, ...config.managedSurfaces]))
         }
 
         for (const skillName of skillsToSync) {
+          if (config.managedSurfaces.length === 0) {
+            continue
+          }
+
           const repositoryPath = normalizeFsPath(path.join(config.repositoryPath, skillName))
           const repositoryEntry = await readEntry(skillName, repositoryPath)
           if (!repositoryEntry || repositoryEntry.kind === 'file') {
             throw new Error(`${skillName} is not present as a directory in the central repository after migration.`)
           }
 
-          const currentEntries = await readManagedEntries(skillName, managedSurfaces)
-          const shouldTrackRollback = hasManagedLinkDrift(repositoryPath, managedSurfaces, currentEntries)
-          const linkResult = await enableManagedSkill(skillName, repositoryPath, managedSurfaces, currentEntries)
+          const currentEntries = await readManagedEntries(skillName, config.managedSurfaces)
+          const shouldTrackRollback = hasManagedLinkDrift(repositoryPath, config.managedSurfaces, currentEntries)
+          const linkResult = await enableManagedSkill(skillName, repositoryPath, config.managedSurfaces, currentEntries)
           if (!linkResult.ok) {
             throw new Error(linkResult.message)
           }
@@ -204,7 +242,7 @@ export class SkillService {
         }
       } catch (error) {
         for (const item of [...linkedSkills].reverse()) {
-          await rollbackManagedLinks(item.skillName, item.repositoryPath, managedSurfaces)
+          await rollbackManagedLinks(item.skillName, item.repositoryPath, config.managedSurfaces)
         }
 
         for (const item of [...movedItems].reverse()) {
@@ -227,11 +265,11 @@ export class SkillService {
       }
 
       if (migration.items.length > 0 && migration.cleanupActions.length > 0) {
-        return this.buildResponse(
-          true,
-          `Migrated ${migration.items.length} skills, removed ${migration.cleanupActions.length} conflicting scanned entries, and synced managed links to the central repository.`,
-        )
-      }
+          return this.buildResponse(
+            true,
+            `Migrated ${migration.items.length} skills, removed ${migration.cleanupActions.length} conflicting filesystem entries, and synced managed links to the central repository.`,
+          )
+        }
 
       if (migration.items.length > 0) {
         return this.buildResponse(true, `Migrated ${migration.items.length} skills into the central repository and synced managed links.`)
@@ -239,7 +277,7 @@ export class SkillService {
 
       return this.buildResponse(
         true,
-        `Removed ${migration.cleanupActions.length} conflicting scanned entries and synced managed links to the central repository.`,
+        `Removed ${migration.cleanupActions.length} conflicting filesystem entries and synced managed links to the central repository.`,
       )
     } catch (error) {
       return this.buildErrorResponse(getErrorMessage(error))
@@ -263,21 +301,34 @@ export class SkillService {
   }
 }
 
-async function scanStateForRepository(repositoryPath: string, scanSurfaces: ScanSurfaceDefinition[]): Promise<ScanState> {
+async function scanStateForRepository(
+  repositoryPath: string,
+  scanSurfaces: ScanSurfaceDefinition[],
+  managedSurfaces: ManagedSurfaceDefinition[],
+): Promise<ScanState> {
   const repositoryEntries = await scanDirectory(repositoryPath, [])
-  const surfaceEntries = new Map<ScanSurfaceId, Map<string, RawEntry>>()
+  const scanSurfaceEntries = new Map<ScanSurfaceId, Map<string, RawEntry>>()
+  const managedSurfaceEntries = new Map<ManagedSurfaceDefinition['id'], Map<string, RawEntry>>()
 
   const scannedEntries = await Promise.all(
-    scanSurfaces.map(async (surface) => [surface.id, await scanDirectory(surface.path, getReservedNames(surface.id))] as const),
+    scanSurfaces.map(async (surface) => [surface.id, await scanDirectory(surface.path, surface.reservedNames ?? [])] as const),
+  )
+  const managedEntries = await Promise.all(
+    managedSurfaces.map(async (surface) => [surface.id, await scanDirectory(surface.path, [])] as const),
   )
 
   for (const [surfaceId, entries] of scannedEntries) {
-    surfaceEntries.set(surfaceId, entries)
+    scanSurfaceEntries.set(surfaceId, entries)
+  }
+
+  for (const [surfaceId, entries] of managedEntries) {
+    managedSurfaceEntries.set(surfaceId, entries)
   }
 
   return {
     repositoryEntries,
-    surfaceEntries,
+    scanSurfaceEntries,
+    managedSurfaceEntries,
   }
 }
 
@@ -289,16 +340,21 @@ function buildSkillRow(
 ): SkillRow {
   const repositoryEntry = scanState.repositoryEntries.get(skillName)
   const repositoryPath = repositoryEntry?.path ?? null
-  const locations = buildLocations(skillName, scanSurfaces, scanState.surfaceEntries)
-  const managedLinks = managedSurfaces.map((surface) =>
-    classifyManagedLink(skillName, surface, scanState.surfaceEntries.get(surface.id)?.get(skillName), repositoryPath),
+  const scanLocations = buildLocations(skillName, scanSurfaces, scanState.scanSurfaceEntries)
+  const managedLocations = buildLocations(skillName, managedSurfaces, scanState.managedSurfaceEntries)
+  const locations = dedupeLocations([...scanLocations, ...managedLocations])
+  const legacyLocations = scanLocations.filter(
+    (location) => !managedSurfaces.some((surface) => samePath(path.dirname(location.entryPath), surface.path)),
   )
-  const managedEntries = managedSurfaces.map((surface) => scanState.surfaceEntries.get(surface.id)?.get(skillName))
+  const managedLinks = managedSurfaces.map((surface) =>
+    classifyManagedLink(skillName, surface, scanState.managedSurfaceEntries.get(surface.id)?.get(skillName), repositoryPath),
+  )
+  const managedEntries = managedSurfaces.map((surface) => scanState.managedSurfaceEntries.get(surface.id)?.get(skillName))
   const managedConflictMessages = repositoryEntry
     ? buildManagedConflictMessages(skillName, managedSurfaces, managedEntries, repositoryEntry.path)
     : []
   const legacyConflictMessages = repositoryEntry
-    ? buildLegacyConflictMessages(skillName, locations, repositoryEntry.path)
+    ? buildLegacyConflictMessages(skillName, legacyLocations, repositoryEntry.path)
     : []
 
   if (managedConflictMessages.length || legacyConflictMessages.length) {
@@ -315,6 +371,19 @@ function buildSkillRow(
   }
 
   if (repositoryEntry) {
+    if (!managedLinks.length) {
+      return {
+        skillName,
+        state: 'disabled',
+        repositoryPath,
+        canEnable: false,
+        canDisable: false,
+        message: `${skillName} is stored centrally, but no managed outputs are configured.`,
+        managedLinks,
+        locations,
+      }
+    }
+
     const enabledCount = managedLinks.filter((link) => link.state === 'enabled').length
     const missingCount = managedLinks.filter((link) => link.state === 'missing').length
 
@@ -325,7 +394,7 @@ function buildSkillRow(
         repositoryPath,
         canEnable: false,
         canDisable: true,
-        message: `${skillName} is linked into both managed surfaces.`,
+        message: `${skillName} is linked into all configured managed outputs.`,
         managedLinks,
         locations,
       }
@@ -336,9 +405,9 @@ function buildSkillRow(
         skillName,
         state: 'disabled',
         repositoryPath,
-        canEnable: true,
+        canEnable: managedLinks.length > 0,
         canDisable: false,
-        message: `${skillName} is stored centrally but currently disabled for all managed surfaces.`,
+        message: `${skillName} is stored centrally but currently disabled for all configured managed outputs.`,
         managedLinks,
         locations,
       }
@@ -350,7 +419,7 @@ function buildSkillRow(
       repositoryPath,
       canEnable: true,
       canDisable: canRemoveManagedEntries(managedEntries),
-      message: `${skillName} is only linked into part of the managed surface set. Enable to repair both links, or disable to clear them.`,
+      message: `${skillName} is only linked into part of the managed output set. Enable to repair all links, or disable to clear them.`,
       managedLinks,
       locations,
     }
@@ -383,12 +452,12 @@ function buildSkillRow(
   }
 }
 
-function buildLocations(
+function buildLocations<TSurface extends Pick<ScanSurfaceDefinition, 'id' | 'name'>>(
   skillName: string,
-  scanSurfaces: ScanSurfaceDefinition[],
-  surfaceEntries: Map<ScanSurfaceId, Map<string, RawEntry>>,
+  surfaces: TSurface[],
+  surfaceEntries: Map<TSurface['id'], Map<string, RawEntry>>,
 ): SkillLocation[] {
-  return scanSurfaces.flatMap((surface) => {
+  return surfaces.flatMap((surface) => {
     const entry = surfaceEntries.get(surface.id)?.get(skillName)
     if (!entry) {
       return []
@@ -492,10 +561,6 @@ function buildManagedConflictMessages(
 
 function buildLegacyConflictMessages(skillName: string, locations: SkillLocation[], repositoryPath: string): string[] {
   return locations.flatMap((location) => {
-    if (location.surfaceId === 'agents' || location.surfaceId === 'claude') {
-      return []
-    }
-
     if (location.kind === 'file') {
       return [`${skillName}: ${location.surfaceName} contains a file at ${location.entryPath}.`]
     }
@@ -510,6 +575,23 @@ function buildLegacyConflictMessages(skillName: string, locations: SkillLocation
 
     return [`${skillName}: ${location.surfaceName} still resolves to ${location.realPath} instead of the central repository.`]
   })
+}
+
+function dedupeLocations(locations: SkillLocation[]): SkillLocation[] {
+  const seen = new Set<string>()
+  const deduped: SkillLocation[] = []
+
+  for (const location of locations) {
+    const key = toComparisonKey(location.entryPath)
+    if (seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    deduped.push(location)
+  }
+
+  return deduped
 }
 
 function assessLegacySources(skillName: string, locations: SkillLocation[]): SourceAssessment {
@@ -614,9 +696,10 @@ function assessRepositoryCleanup(
 function buildMigrationPreview(
   repositoryPath: string,
   scanSurfaces: ScanSurfaceDefinition[],
+  managedSurfaces: ManagedSurfaceDefinition[],
   scanState: ScanState,
 ): MigrationPreview {
-  const plan = buildMigrationPlan(repositoryPath, scanSurfaces, scanState)
+  const plan = buildMigrationPlan(repositoryPath, scanSurfaces, managedSurfaces, scanState)
 
   return {
     needed: plan.needed,
@@ -633,6 +716,7 @@ function buildMigrationPreview(
 function buildMigrationPlan(
   repositoryPath: string,
   scanSurfaces: ScanSurfaceDefinition[],
+  managedSurfaces: ManagedSurfaceDefinition[],
   scanState: ScanState,
 ): MigrationPlan {
   const skillNames = new Set<string>()
@@ -641,7 +725,13 @@ function buildMigrationPlan(
   const cleanupWarnings: string[] = []
   const cleanupActions: MigrationCleanupAction[] = []
 
-  for (const entries of scanState.surfaceEntries.values()) {
+  for (const entries of scanState.scanSurfaceEntries.values()) {
+    for (const skillName of entries.keys()) {
+      skillNames.add(skillName)
+    }
+  }
+
+  for (const entries of scanState.managedSurfaceEntries.values()) {
     for (const skillName of entries.keys()) {
       skillNames.add(skillName)
     }
@@ -649,7 +739,9 @@ function buildMigrationPlan(
 
   for (const skillName of skillNames) {
     const repositoryEntry = scanState.repositoryEntries.get(skillName)
-    const locations = buildLocations(skillName, scanSurfaces, scanState.surfaceEntries)
+    const scanLocations = buildLocations(skillName, scanSurfaces, scanState.scanSurfaceEntries)
+    const managedLocations = buildLocations(skillName, managedSurfaces, scanState.managedSurfaceEntries)
+    const locations = dedupeLocations([...scanLocations, ...managedLocations])
 
     if (repositoryEntry) {
       const cleanupAssessment = assessRepositoryCleanup(skillName, locations, repositoryEntry.path)
@@ -713,8 +805,36 @@ function dedupeCleanupActions(actions: MigrationCleanupAction[]): MigrationClean
   return deduped
 }
 
+function dedupeSurfacePaths<TSurface extends Pick<ScanSurfaceDefinition, 'path'>>(surfaces: TSurface[]): TSurface[] {
+  const seen = new Set<string>()
+  const deduped: TSurface[] = []
+
+  for (const surface of surfaces) {
+    const key = toComparisonKey(surface.path)
+    if (seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    deduped.push(surface)
+  }
+
+  return deduped
+}
+
 function dedupeSkillNames(names: string[]): string[] {
   return [...new Set(names)]
+}
+
+function sameSurfacePathSet(left: ManagedSurfaceDefinition[], right: ManagedSurfaceDefinition[]): boolean {
+  const leftPaths = uniquePaths(left.map((surface) => surface.path))
+  const rightPaths = uniquePaths(right.map((surface) => surface.path))
+
+  if (leftPaths.length !== rightPaths.length) {
+    return false
+  }
+
+  return leftPaths.every((surfacePath) => rightPaths.some((otherPath) => samePath(surfacePath, otherPath)))
 }
 
 function hasManagedLinkDrift(
@@ -799,8 +919,10 @@ async function enableManagedSkill(
 
   if (!actions.length) {
     return {
-      ok: true,
-      message: `${skillName} is already enabled in both managed surfaces.`,
+      ok: managedSurfaces.length > 0,
+      message: managedSurfaces.length > 0
+        ? `${skillName} is already enabled across the configured managed outputs.`
+        : `No managed outputs are configured for ${skillName}.`,
     }
   }
 
@@ -822,7 +944,7 @@ async function enableManagedSkill(
 
     return {
       ok: true,
-      message: `Enabled ${skillName} in .agents and .claude.`,
+      message: `Enabled ${skillName} across ${managedSurfaces.length} managed output${managedSurfaces.length === 1 ? '' : 's'}.`,
     }
   } catch (error) {
     for (const action of [...actions].reverse()) {
@@ -873,7 +995,9 @@ async function disableManagedSkill(
   if (!actions.length) {
     return {
       ok: true,
-      message: `${skillName} is already disabled in both managed surfaces.`,
+      message: managedSurfaces.length > 0
+        ? `${skillName} is already disabled across the configured managed outputs.`
+        : `No managed outputs are configured for ${skillName}.`,
     }
   }
 
@@ -892,7 +1016,7 @@ async function disableManagedSkill(
 
     return {
       ok: true,
-      message: `Disabled ${skillName} in .agents and .claude.`,
+      message: `Disabled ${skillName} across ${actions.length} managed output${actions.length === 1 ? '' : 's'}.`,
     }
   } catch (error) {
     for (const action of [...actions].reverse()) {
@@ -921,8 +1045,11 @@ async function disableManagedSkill(
   }
 }
 
-async function removeLegacyEntries(skillName: string, scanSurfaces: ScanSurfaceDefinition[]): Promise<void> {
-  for (const surface of scanSurfaces) {
+async function removeLegacyEntries(
+  skillName: string,
+  surfaces: Array<Pick<ScanSurfaceDefinition, 'path'>>,
+): Promise<void> {
+  for (const surface of surfaces) {
     const entryPath = path.join(surface.path, skillName)
     const entry = await readEntry(skillName, entryPath)
     if (!entry) {
@@ -934,6 +1061,40 @@ async function removeLegacyEntries(skillName: string, scanSurfaces: ScanSurfaceD
     }
 
     await fs.rm(entry.path, { recursive: true, force: true, maxRetries: 3 })
+  }
+}
+
+async function syncManagedOutputSelection(
+  previousManagedSurfaces: ManagedSurfaceDefinition[],
+  nextManagedSurfaces: ManagedSurfaceDefinition[],
+  skills: SkillRow[],
+): Promise<void> {
+  if (sameSurfacePathSet(previousManagedSurfaces, nextManagedSurfaces)) {
+    return
+  }
+
+  const removedSurfaces = previousManagedSurfaces.filter(
+    (surface) => !nextManagedSurfaces.some((nextSurface) => samePath(nextSurface.path, surface.path)),
+  )
+
+  for (const skill of skills) {
+    if (!skill.repositoryPath) {
+      continue
+    }
+
+    if (removedSurfaces.length > 0) {
+      await rollbackManagedLinks(skill.skillName, skill.repositoryPath, removedSurfaces)
+    }
+
+    if (skill.state !== 'enabled' || nextManagedSurfaces.length === 0) {
+      continue
+    }
+
+    const currentEntries = await readManagedEntries(skill.skillName, nextManagedSurfaces)
+    const enableResult = await enableManagedSkill(skill.skillName, skill.repositoryPath, nextManagedSurfaces, currentEntries)
+    if (!enableResult.ok) {
+      throw new Error(enableResult.message)
+    }
   }
 }
 
@@ -972,10 +1133,6 @@ function buildAtomicFailureMessage(prefix: string, error: unknown, rollbackError
 
 function dedupeMessages(messages: string[]): string[] {
   return [...new Set(messages)]
-}
-
-function getReservedNames(surfaceId: ScanSurfaceId): string[] {
-  return surfaceId === 'codex' ? ['.system'] : []
 }
 
 async function scanDirectory(directoryPath: string, reservedNames: string[]): Promise<Map<string, RawEntry>> {

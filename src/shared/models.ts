@@ -2,9 +2,17 @@ export type SkillState = 'enabled' | 'disabled' | 'partial' | 'invalid' | 'needs
 
 export type SkillEntryKind = 'link' | 'directory' | 'file'
 
-export type ScanSurfaceId = 'opencode' | 'opencodeConfig' | 'claude' | 'agents' | 'codex'
+export type ScanSurfaceId = string
 
-export type ManagedSurfaceId = 'agents' | 'claude'
+export type ManagedSurfaceId = string
+
+export type ThemeMode = 'dark' | 'light'
+
+export interface AppSettings {
+  theme: ThemeMode
+  managedOutputPaths: string[]
+  scannedPaths: string[]
+}
 
 export interface ScanSurfaceDefinition {
   id: ScanSurfaceId
@@ -12,6 +20,7 @@ export interface ScanSurfaceDefinition {
   path: string
   managed: boolean
   description: string
+  reservedNames?: string[]
 }
 
 export interface ManagedSurfaceDefinition {
@@ -72,6 +81,8 @@ export interface MigrationPreview {
 export interface AppSnapshot {
   repositoryPath: string
   repositoryExists: boolean
+  settings: AppSettings
+  settingsDefaults: AppSettings
   scanSurfaces: ScanSurfaceDefinition[]
   managedSurfaces: ManagedSurfaceDefinition[]
   skills: SkillRow[]
@@ -97,10 +108,13 @@ export interface RunMigrationRequest {
   forceCleanup?: boolean
 }
 
+export type SaveSettingsRequest = AppSettings
+
 export interface UiApi {
   getSnapshot: () => Promise<AppSnapshot>
   toggleSkill: (request: ToggleSkillRequest) => Promise<SnapshotResponse>
   runMigration: (request?: RunMigrationRequest) => Promise<SnapshotResponse>
+  saveSettings: (request: SaveSettingsRequest) => Promise<SnapshotResponse>
   openPath: (targetPath: string) => Promise<BasicResponse>
   minimizeWindow: () => Promise<void>
   toggleMaximizeWindow: () => Promise<boolean>
